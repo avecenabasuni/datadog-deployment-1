@@ -1,0 +1,3 @@
+*.sh text eol=lf
+scripts/datadog-bootstrap text eol=lf
+*.py text eol=lf

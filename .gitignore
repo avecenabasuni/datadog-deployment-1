@@ -1,0 +1,11 @@
+# Local Datadog credentials and generated deployment artifacts
+.env.datadog
+datadog/generated/
+config/production.json
+config/secrets.json
+generated/
+artifacts/
+backups/
+discovery*.json
+__pycache__/
+*.pyc
