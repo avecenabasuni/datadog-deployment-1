@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  eminerba-web:
+    container_name: eminerba-lab-web
+    image: sucofindo-lab-web:php81
+    build:
+      context: .
+      target: web
+      args:
+        PHP_IMAGE: ${PHP_IMAGE:?Run lab/prepare.py first}
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:8080:80'
+    networks: [eminerba]
+    depends_on: [eminerba-api]
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1/health.php']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  eminerba-api:
+    container_name: eminerba-lab-api
+    image: sucofindo-lab-api:php81
+    build:
+      context: .
+      target: api
+      args:
+        PHP_IMAGE: ${PHP_IMAGE:?Run lab/prepare.py first}
+    restart: unless-stopped
+    environment:
+      DB_HOST: eminerba-db
+      DB_NAME: eminerba_lab
+      DB_USER: eminerba_lab
+      DB_PASSWORD: ${LAB_DB_PASSWORD:?Run lab/prepare.py first}
+    networks: [eminerba]
+    depends_on:
+      eminerba-db:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1/']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  eminerba-db:
+    container_name: eminerba-lab-db
+    image: ${MYSQL_IMAGE:?Run lab/prepare.py first}
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${LAB_ROOT_PASSWORD:?Run lab/prepare.py first}
+      MYSQL_DATABASE: eminerba_lab
+      MYSQL_USER: eminerba_lab
+      MYSQL_PASSWORD: ${LAB_DB_PASSWORD:?Run lab/prepare.py first}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/001-seed.sql:/docker-entrypoint-initdb.d/001-seed.sql:ro
+    networks: [eminerba]
+    healthcheck:
+      test: ['CMD-SHELL', 'MYSQL_PWD="$${MYSQL_PASSWORD}" mysql --protocol=TCP -h 127.0.0.1 -u eminerba_lab eminerba_lab -Nse "SELECT COUNT(*) FROM samples" >/dev/null']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+networks:
+  eminerba:
+    name: eminerba-lab-network
+
+volumes:
+  mysql-data:

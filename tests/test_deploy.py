@@ -70,7 +70,7 @@ class DeploymentTests(unittest.TestCase):
 
     def test_reject_invalid_input(self):
         for key, val in (("web_container", "REPLACE_WEB"), ("network", "--host"),
-                         ("env", "dev"), ("mysql_schemas", ["x; DROP DATABASE mysql"]),
+                         ("env", "bad env"), ("mysql_schemas", ["x; DROP DATABASE mysql"]),
                          ("agent_image", "registry.datadoghq.com/agent:7"),
                          ("mysql_port", 0), ("runtime_security", "false"),
                          ("output_dir", "/"), ("mysql_schemas", ["business", "business"]),

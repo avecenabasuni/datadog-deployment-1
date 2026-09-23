@@ -18,6 +18,9 @@ See the [full prerequisites](docs/DEPLOYMENT.md#package-and-prerequisites).
 
 ## Getting started
 
+Testing without the original application images? Start with the
+[standalone Ubuntu lab](lab/README.md): two PHP 8.1 services, MySQL 8.0, and `env:lab`.
+
 Run from the package directory on the target host:
 
 ```bash

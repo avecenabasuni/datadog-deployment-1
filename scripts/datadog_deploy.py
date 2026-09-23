@@ -103,7 +103,8 @@ def validate(c, full=False):
         need(filled(c.get(key)) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", c[key]),
              "Isi parameter eksplisit: " + key + " (lihat discover).")
     need(len({c[k] for k in required[:3]}) == 3, "Web, API, dan MySQL harus container berbeda.")
-    need(c.get("env") == "prod", "env wajib prod.")
+    need(isinstance(c.get("env"), str) and re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", c["env"])
+         and filled(c["env"]), "env must be a lowercase environment name, e.g. prod or lab.")
     need(type(c.get("timeout")) is int and 1 <= c["timeout"] <= 1800, "timeout harus 1..1800.")
     need(type(c.get("mysql_port")) is int and 1 <= c["mysql_port"] <= 65535, "mysql_port tidak valid.")
     for key in ("runtime_security", "network_monitoring", "universal_service_monitoring", "process_collection"):
@@ -326,11 +327,11 @@ class Deployment:
         services = {}
         for role in ("web", "api"):
             env = json.loads((ROOT / "datadog/templates/application.json").read_text(encoding="utf-8"))
-            env.update(DD_SERVICE=c[role + "_service"], DD_VERSION=c["version"],
+            env.update(DD_ENV=c["env"], DD_SERVICE=c[role + "_service"], DD_VERSION=c["version"],
                        DD_DBM_PROPAGATION_MODE="full" if role in c["db_apps"] else "disabled")
             services[self.service(report, role)] = {
                 "environment": env,
-                "labels": {"com.datadoghq.tags.env": "prod",
+                "labels": {"com.datadoghq.tags.env": c["env"],
                            "com.datadoghq.tags.service": c[role + "_service"],
                            "com.datadoghq.tags.version": c["version"]},
                 "volumes": [c["socket_dir"] + ":/var/run/datadog:ro"]}
@@ -338,7 +339,7 @@ class Deployment:
             "volumes": [str(self.out / "99-datadog.cnf") + ":" + c["mysql_config_target"] + ":ro"]}
         instance = {"dbm": True, "host": c["mysql_host"], "port": c["mysql_port"],
                     "username": c["db_user"], "password": self.secret("db_password"),
-                    "tags": ["env:prod", "service:" + c["mysql_container"]]}
+                    "tags": ["env:" + c["env"], "service:" + c["mysql_container"]]}
         artifacts = {
             "application.override.json": jdump({"services": services}),
             # JSON is a YAML subset: no third-party YAML parser or secret interpolation.
@@ -365,7 +366,7 @@ class Deployment:
     def agent_spec(self):
         c = self.c
         env = json.loads((ROOT / "datadog/templates/agent.json").read_text())
-        env.update(DD_SITE=c["site"], DD_ENV="prod",
+        env.update(DD_SITE=c["site"], DD_ENV=c["env"],
                    DD_CONTAINER_EXCLUDE_LOGS="name:" + c["agent_name"],
                    DD_PROCESS_AGENT_ENABLED=str(c["process_collection"]).lower(),
                    DD_PROCESS_CONFIG_PROCESS_COLLECTION_ENABLED=str(c["process_collection"]).lower(),
@@ -691,7 +692,8 @@ class Deployment:
             need(tracer and version_tuple(tracer) >= (1, 6, 0), role + " tracer SSI belum terbukti.")
             self.docker("exec", c[role + "_container"], "php", "-r",
                         '$s=@stream_socket_client("unix:///var/run/datadog/apm.socket",$e,$m,5);exit($s?0:1);')
-            for key, val in {"DD_ENV": "prod", "DD_SERVICE": c[role + "_service"],
+            for key, val in {"DD_ENV": c["env"], "DD_SERVICE": c[role + "_service"],
+                             "DD_VERSION": c["version"],
                              "DD_TRACE_AGENT_URL": "unix:///var/run/datadog/apm.socket",
                              "DD_DBM_PROPAGATION_MODE": "full" if role in c["db_apps"] else "disabled"}.items():
                 # Exit code only: don't expose container environment.

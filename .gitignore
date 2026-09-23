@@ -9,3 +9,7 @@ backups/
 discovery*.json
 __pycache__/
 *.pyc
+lab/.env
+lab/generated/
+config/lab.json
+config/lab-secrets.json

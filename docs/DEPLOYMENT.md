@@ -64,7 +64,10 @@ chmod 600 config/secrets.json
 bash scripts/datadog-bootstrap discover
 ```
 
-Populate configuration using discovery results. Container and network names must
+Populate configuration using discovery results. The production example keeps
+`env=prod`; the environment is configurable
+for isolated labs and staging and is propagated to applications, Agent, labels, and DBM tags.
+Container and network names must
 be explicit; the package does not guess. Discovery includes Compose service/project
 labels. Without labels, supply `*_compose_service`; container names are not treated
 as service names. Rendering stops for containers from different projects so the

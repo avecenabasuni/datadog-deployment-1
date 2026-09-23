@@ -1,0 +1,6 @@
+.env
+generated/
+__pycache__/
+*.pyc
+README.md
+prepare.py
