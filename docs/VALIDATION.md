@@ -1,86 +1,88 @@
-# Checklist acceptance Sucofindo
+# Sucofindo acceptance checklist
 
-Catat waktu window, operator, release aplikasi, image digest Agent, versi SSI/PHP
-dan nomor change. Jangan menyimpan environment/password atau isi request pengguna
-di checklist ini. Status akhir belum ACCEPTED sampai bukti runtime/telemetry selesai.
+Record the maintenance window, operator, application release, Agent image digest,
+SSI/PHP versions, and change number. Do not include environment dumps, passwords,
+or user request bodies. Status remains unaccepted until runtime and telemetry evidence is complete.
 
-## Sebelum mutasi
+## Before making changes
 
-- [ ] Inventory Ubuntu/kernel/arsitektur/Docker sesuai matrix resmi.
-- [ ] Container web, API, DB, Compose labels/project, dan network disetujui tim.
-- [ ] Audit seluruh inventory untuk Agent custom image/host Agent; hanya satu Agent per host.
-- [ ] Tidak ada tracer PHP manual/extension bentrok di image maupun konfigurasi SAPI web.
-- [ ] PHP CLI **dan SAPI web** 8.1; OPcache JIT/Xdebug/ionCube/NewRelic/Blackfire/pcov tidak menghalangi SSI.
-- [ ] MySQL server `SELECT VERSION(), @@datadir` cocok dengan discovery; bukan MariaDB/Percona tak direview.
-- [ ] Datadir yang sebenarnya ditutupi volume/bind persisten; backup database dan restore procedure tim tersedia.
-- [ ] Check include directory MySQL benar-benar membaca target `99-datadog.cnf`; jangan berasumsi semua image membaca `/etc/mysql/conf.d`.
-- [ ] Driver **yang dipakai CodeIgniter pada request** ditentukan (PDO MySQL vs MySQLi), bukan hanya extension yang tersedia.
-- [ ] API key baru/site production, RUM application/client token/config ID production sudah benar.
-- [ ] Kedua entry installer serta download transitif direview; hash dicatat. RUM configurator help mengenali semua flags.
-- [ ] Egress HTTPS/TLS ke registry, installer, Datadog intake, RUM CDN/intake diizinkan; tidak menonaktifkan TLS verification.
-- [ ] Opsi security/CNM/USM dan privilege host direview terpisah; pemilik menyetujui scope telemetry/billing.
-- [ ] Tim review snippet merge dengan `docker-compose ... config -q`; tidak mencetak full config yang mungkin punya secret.
+- [ ] Ubuntu/kernel/architecture/Docker inventory matches the official compatibility matrix.
+- [ ] The team approves web/API/database containers, Compose labels/project, and network.
+- [ ] Audit the entire inventory for custom Agent images and host Agents; allow only one Agent per host.
+- [ ] No manually installed PHP tracer or conflicting extension exists in images or web SAPI configuration.
+- [ ] PHP CLI **and web SAPI** use 8.1; OPcache JIT/Xdebug/ionCube/NewRelic/Blackfire/pcov do not block SSI.
+- [ ] MySQL `SELECT VERSION(), @@datadir` matches discovery; no unreviewed MariaDB/Percona distribution.
+- [ ] A persistent volume/bind mount covers the actual datadir; database backups and the team's restore procedure are available.
+- [ ] Confirm MySQL actually reads the target `99-datadog.cnf`; not every image reads `/etc/mysql/conf.d`.
+- [ ] Identify the driver **used by CodeIgniter during requests** (PDO MySQL versus MySQLi), not merely installed extensions.
+- [ ] Verify the new API key/site and production RUM application/client token/configuration ID.
+- [ ] Review both installer entry scripts and transitive downloads; record hashes. RUM configurator help recognizes all required flags.
+- [ ] Allow HTTPS/TLS egress to registries, installers, Datadog intake, and RUM CDN/intake without disabling TLS verification.
+- [ ] Review security/CNM/USM options and host privileges separately; owners approve telemetry scope and billing.
+- [ ] Review snippet merges with `docker-compose ... config -q`; do not print full configuration that may contain secrets.
 
-## Setelah handoff recreate
+## After the recreation handoff
 
-- [ ] Docker default runtime `dd-shim`; web/API container **baru** menggunakan runtime tersebut.
-- [ ] PHP tracer versi >=1.6 muncul di SAPI HTTP; CLI bukan pengganti test request.
-- [ ] Env DD_ENV=prod, service/version, DBM propagation ada pada worker web/API.
-- [ ] PHP-FPM `clear_env` atau Apache env handling tidak membuang env instrumentation.
-- [ ] Socket `/var/run/datadog/apm.socket` ada di host/Agent/aplikasi. Worker UID Apache/FPM dapat connect; jangan chmod 777 tanpa review.
-- [ ] Agent HTTP `http://<agent_name>:8126/info` reachable dari web; MySQL reachable langsung dari Agent melalui alias network.
-- [ ] MySQL Performance Schema ON dan tiga digest/text sizes 4096; current statements/waits + history-long enabled.
-- [ ] Account/grants/limit koneksi dan definer procedure diverifikasi DBA. Tidak ada rotasi password tak direncanakan.
-- [ ] Procedure explain berjalan pada schema datadog dan schema aplikasi menggunakan user DBM.
-- [ ] `verify` lulus; `agent check mysql --json` tidak berisi error; config loaded host/user/dbm cocok dengan target tanpa membagikan password.
+- [ ] Docker's default runtime is `dd-shim`; **new** web/API containers use it.
+- [ ] PHP tracer >=1.6 is present in the HTTP SAPI; CLI checks do not replace request tests.
+- [ ] Web/API workers receive DD_ENV=prod, service/version, and DBM propagation settings.
+- [ ] PHP-FPM `clear_env` or Apache environment handling does not discard instrumentation variables.
+- [ ] `/var/run/datadog/apm.socket` exists on the host, Agent, and applications. Apache/FPM worker UIDs can connect; do not use chmod 777 without review.
+- [ ] Web containers can reach `http://<agent_name>:8126/info`; the Agent can reach MySQL directly through its network alias.
+- [ ] MySQL Performance Schema is ON, all three digest/text sizes are 4096, and current statements/waits plus history-long consumers are enabled.
+- [ ] The DBA verifies accounts, grants, connection limits, and procedure definers. No unplanned password rotation occurred.
+- [ ] The DBM user can execute explain procedures in datadog and application schemas.
+- [ ] `verify` passes; `agent check mysql --json` reports no errors. Loaded host/user/dbm settings match the target without disclosing passwords.
 
-## Agent feature health (manual, bukan sekadar section presence)
+## Agent feature health (manual, not just section presence)
 
-Jalankan `docker exec <agent> agent status` secara lokal. Jangan mengunggah output
-mentah sebelum redaksi. Section name/JSON dapat berbeda antar versi Agent.
+Run `docker exec <agent> agent status` locally. Redact output before sharing it.
+Section names and JSON structure may differ between Agent versions.
 
-- [ ] Collector/forwarder sehat, API key accepted dan tidak ada error intake.
-- [ ] APM Agent Running, receiver menerima traces setelah request API/web.
-- [ ] Logs Agent Running, input container yang benar active, bytes/logs sent bertambah.
-- [ ] Process Agent Running bila dipilih, process/container inventory tampil di Datadog.
-- [ ] Bila CNM dipilih: system-probe/network module berhasil start, tidak ada eBPF/permission/kernel error, data koneksi terlihat.
-- [ ] Bila USM dipilih: service-monitoring module sehat dan HTTP services teramati; ini tidak menggantikan trace PHP SSI.
-- [ ] Bila runtime security dipilih: security-agent/runtime module sehat dan workload terlihat. Self-test/alert test hanya sesuai prosedur tim.
-- [ ] Bandingkan konsumsi CPU/memory/disk/log volume dengan baseline sebelum window.
+- [ ] Collector/forwarder are healthy, the API key is accepted, and there are no intake errors.
+- [ ] The APM Agent is running and receives traces after API/web requests.
+- [ ] The Logs Agent is running, expected container inputs are active, and sent byte/log counts increase.
+- [ ] When selected, the Process Agent is running and process/container inventory appears in Datadog.
+- [ ] When CNM is selected, system-probe/network starts without eBPF/permission/kernel errors and connection data is visible.
+- [ ] When USM is selected, service-monitoring is healthy and HTTP services are observed; this does not replace PHP SSI traces.
+- [ ] When runtime security is selected, security-agent/runtime is healthy and workloads are visible. Run self-tests/alert tests only under the team's procedures.
+- [ ] Compare CPU, memory, disk, and log volume with the pre-window baseline.
 
-## RUM persistence dan injection
+## RUM persistence and injection
 
-- [ ] Apache config test lulus sebelum graceful reload, modul Datadog termuat.
-- [ ] DatadogTracing Off untuk module Apache; APM PHP tetap berasal dari SSI.
-- [ ] RUM settings/ID/token/site/remoteConfigurationId production dikonfirmasi pada config terpasang.
-- [ ] HTTP response HTML mengandung injeksi; tidak ada duplikasi SDK manual yang sebelumnya ditanam aplikasi.
-- [ ] CSP mengizinkan script/connect yang diperlukan. Jika Apache proxy, compression/TLS upstream tidak menghalangi filter body.
-- [ ] RUM config/module sudah masuk image tim atau mount persisten yang direview, termasuk external LoadModule/Include/library dependencies.
-- [ ] Recreate dari deployment resmi tim lalu ulangi config test + modul + HTTP injection; bukti instalasi persisten disimpan.
-- [ ] Backup/export Apache tidak mengikutsertakan credential/TLS key ke registry publik atau source control.
+- [ ] Apache configuration testing passes before graceful reload and the Datadog module is loaded.
+- [ ] Apache uses DatadogTracing Off; PHP APM still comes from SSI.
+- [ ] Installed RUM settings/ID/token/site/remoteConfigurationId belong to production.
+- [ ] HTML responses contain injection without duplicating an existing manually embedded SDK.
+- [ ] CSP permits required scripts/connections. For Apache proxies, upstream compression/TLS does not prevent body filtering.
+- [ ] RUM configuration/module are included in the team's image or reviewed persistent mounts, including external LoadModule/Include/library dependencies.
+- [ ] Recreate using the team's deployment, then repeat configuration, module, and HTTP injection checks; retain persistence evidence.
+- [ ] Apache backups/exports do not publish credentials or TLS keys to public registries or source control.
 
-## Telemetry end-to-end (wajib, tidak diautomasi dengan credential API tambahan)
+## End-to-end telemetry (required; not automated with additional API credentials)
 
-1. Buka browser production dan jalankan alur baca yang memanggil API dan MySQL.
-   Catat timestamp, service, resource, status tanpa PII; jangan memakai request tulis untuk smoke.
-2. Di Datadog lihat infrastructure host/container, log nyata dari web/API, dan APM
-   trace HTTP dengan SQL child span. Trace CLI saja tidak memenuhi acceptance.
-3. Untuk RUM–APM, konfigurasi Allowed Tracing URLs hanya origin/path internal yang
-   diperlukan di UI RUM, trace/session sampling yang disepakati dan propagator.
-   Pastikan request browser mengirim trace headers; proxy tidak membuangnya.
-   Untuk lintas origin, CORS OPTIONS dan Access-Control-Allow-Headers mencakup header
-   yang benar-benar dipakai: traceparent/tracestate dan/atau x-datadog-trace-id,
-   x-datadog-parent-id, x-datadog-origin, x-datadog-sampling-priority (baggage jika dipakai).
-   Jangan wildcard seluruh domain. Bukti: resource RUM membuka trace backend yang sama.
-4. Untuk APM–DBM, pastikan driver aktual didukung propagation dan query memiliki
-   context trace. Cari query sample DBM dan hubungan ke SQL span yang sama; sampling
-   dapat membuat satu request tidak muncul. Gunakan traffic baca berulang dengan batas
-   waktu yang disepakati, bukan loop tak terbatas. MySQLi-only: status korelasi PENDING
-   sampai dukungan versi aktual dan bukti berhasil tersedia; jangan mengubah driver otomatis.
-5. Verifikasi explain plan untuk query tabel nyata yang aman, bukan hanya SELECT 1.
-6. Amati error rate/latency/resource selama interval tim (contoh 15 menit). Jika ada
-   regresi atau instrumentation ganda, ikuti rollback layer terkait.
+1. Open the production application in a browser and execute a read-only flow that
+   calls the API and MySQL. Record timestamp, service, resource, and status without
+   PII. Do not use write requests for smoke testing.
+2. In Datadog, confirm host/container infrastructure, real web/API logs, and an HTTP
+   APM trace with SQL child spans. A CLI trace alone does not satisfy acceptance.
+3. For RUM–APM, configure Allowed Tracing URLs only for required internal origins/paths,
+   agreed trace/session sampling, and propagators in the RUM UI. Confirm the browser
+   sends trace headers and proxies preserve them. For cross-origin requests, CORS
+   OPTIONS and Access-Control-Allow-Headers must cover the headers actually used:
+   traceparent/tracestate and/or x-datadog-trace-id, x-datadog-parent-id,
+   x-datadog-origin, x-datadog-sampling-priority, plus baggage if used.
+   Do not allow every domain through a wildcard. Evidence: a RUM resource opens the matching backend trace.
+4. For APM–DBM, confirm propagation support for the actual driver and trace context
+   in queries. Find a DBM query sample linked to the same SQL span; sampling can
+   omit an individual request. Use repeated read-only traffic within an agreed
+   timeout, never an unbounded loop. For MySQLi-only applications, correlation
+   remains PENDING until actual-version support and working evidence are established.
+   Do not switch drivers automatically.
+5. Verify explain plans for safe queries against real tables, not only SELECT 1.
+6. Observe error rates, latency, and resource usage for the team's agreed interval
+   (for example, 15 minutes). Follow component rollback for regressions or duplicate instrumentation.
 
-Catatan status: `verify` exit 0 berarti checks lokal yang disebut script lulus;
-tidak sama dengan deployment end-to-end ACCEPTED. Poin manual yang gagal tetap
-menghalangi sign-off walaupun script exit 0.
+A zero exit code from `verify` means only its documented local checks passed.
+It does not mean end-to-end deployment is ACCEPTED. Failed manual checks block
+sign-off even when the script exits successfully.

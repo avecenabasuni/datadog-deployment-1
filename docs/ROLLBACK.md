@@ -1,88 +1,88 @@
-# Rollback per layer
+# Component-level rollback
 
-Rollback dijalankan tim Sucofindo pada window yang disetujui. Tidak ada subcommand
-yang menghapus volume/data database. Catat config/image/container ID sebelum dan
-sesudah perubahan. DDL MySQL dan installer host tidak transaksional.
+The Sucofindo team performs rollback during an approved maintenance window.
+No subcommand deletes database volumes or data. Record configuration, image, and
+container IDs before and after changes. MySQL DDL and host installers are not transactional.
 
 ## Agent
 
-1. Pastikan container yang dipilih adalah Agent dari change ini, bukan Agent lama.
-   Cocokkan name, image, label `id.sucofindo.datadog.managed`, dan inventory.
-2. Stop Agent baru jika diperlukan: `docker stop <agent-baru>`. Ini tidak mengubah
-   aplikasi/database; telemetry berhenti. Simpan container/config untuk investigasi.
-3. Bila tim sebelumnya mengganti Agent secara manual, restore definisi/image/config
-   lama lalu start Agent lama setelah Agent baru stop. Jangan menjalankan dua Agent.
-4. Untuk disable hanya runtime security/CNM/USM, ubah flag dan review spec baru;
-   recreate **Agent saja** oleh tim. Paket menolak perubahan spec existing otomatis.
-5. Jika aplikasi masih terinstrumentasi tetapi Agent stop, cek dampak buffering/error
-   tracer dan putuskan disable instrumentation bersama rollback aplikasi.
+1. Confirm that the selected container is the Agent introduced by this change, not
+   an existing Agent. Match its name, image, inventory, and
+   `id.sucofindo.datadog.managed` label.
+2. Stop the new Agent if necessary: `docker stop <new-agent>`. Applications and
+   databases remain unchanged; telemetry stops. Preserve the container/configuration for investigation.
+3. If the team previously replaced an Agent manually, restore its former definition,
+   image, and configuration. Start it only after stopping the new Agent; do not run two Agents.
+4. To disable only runtime security/CNM/USM, change the flags and review the new
+   specification. The team recreates **only the Agent**; the package refuses automatic specification changes.
+5. If applications remain instrumented while the Agent is stopped, assess tracer
+   buffering/errors and decide whether to disable instrumentation as part of application rollback.
 
-API key baru dapat dicabut sesuai prosedur credential tim setelah tidak digunakan.
-Generated MySQL config dan secret local tetap sensitif; kelola retensinya. Jangan
-hapus `/var/run/datadog` saat aplikasi/Agent lain masih memakai socket tersebut.
+Revoke the new API key under the team's credential procedure once it is no longer
+used. Generated MySQL configuration and local secrets remain sensitive; manage
+their retention. Do not delete `/var/run/datadog` while other applications or Agents use its sockets.
 
-## SSI host dan PHP
+## Host SSI and PHP
 
-1. Untuk menghentikan tracing layanan tertentu, tim memasukkan
-   `DD_INSTRUMENT_SERVICE_WITH_APM=false` dan `DD_TRACE_ENABLED=false` pada deployment,
-   lalu **recreate** aplikasi untuk menerapkan environment baru.
-2. Untuk rollback SSI host secara menyeluruh, ikuti metode uninstall resmi sesuai
-   versi installer. Dokumentasi Docker mencantumkan `dd-container-install --uninstall`
-   kemudian restart Docker. Pastikan binary tersedia dan review `--help`; layout
-   installer modern dapat berada di `/opt/datadog-packages/run/`.
-3. Restart Docker memengaruhi container lain: tim menjadwalkan dan menjalankannya,
-   bukan script ini. Simpan backup `ssi-before-*` (daemon.json/preload). Jangan copy
-   seluruh daemon.json lama membabi buta bila ada perubahan Docker lain sesudah backup.
-4. Verifikasi default runtime kembali ke runtime sebelumnya dan config tidak merujuk
-   runtime yang sudah dihapus. Tim recreate aplikasi agar injection tidak tertinggal.
-5. Pastikan PHP HTTP normal, tidak ada ddtrace ganda, error rate/latency kembali normal.
+1. To stop tracing selected services, the team sets
+   `DD_INSTRUMENT_SERVICE_WITH_APM=false` and `DD_TRACE_ENABLED=false` in the
+   deployment, then **recreates** application containers to apply the new environment.
+2. For a full host SSI rollback, follow the official uninstall procedure for the
+   installed version. Docker documentation lists `dd-container-install --uninstall`
+   followed by a Docker restart. Confirm the binary is available and review
+   `--help`; modern installer layouts may use `/opt/datadog-packages/run/`.
+3. Restarting Docker affects other containers. The team schedules and performs it,
+   not this script. Preserve the `ssi-before-*` backup (daemon.json/preload).
+   Do not blindly overwrite daemon.json if other Docker changes were made after the backup.
+4. Verify that the default runtime is restored and configuration does not reference
+   a removed runtime. The team recreates applications to remove residual injection.
+5. Verify normal PHP HTTP operation, no duplicate ddtrace, and normal error rates/latency.
 
-Jika installer timeout, subprocess downstream bisa masih berjalan. Periksa process,
-package state dan Docker runtime sebelum uninstall/rerun. Jangan menjalankan installer
-dan uninstall paralel.
+After an installer timeout, downstream subprocesses may still be running. Inspect
+processes, package state, and the Docker runtime before uninstalling or retrying.
+Do not run installation and uninstallation concurrently.
 
-## Aplikasi dan startup MySQL
+## Applications and MySQL startup configuration
 
-1. Tim mengembalikan env service/version/DBM propagation, socket mounts, serta image
-   ke revision deployment sebelumnya. Environment/image/mount baru perlu recreate.
-2. Restore file MySQL config sebelum Datadog atau lepas mount tambahan melalui Compose
-   tim. Mengganti mount membutuhkan recreate MySQL; jika mount sama, restart cukup
-   untuk startup-only variables.
-3. **Pertahankan persis volume/data directory database yang sama.** Jangan memakai
-   `down -v`, prune volume, remove data directory, atau menginisialisasi DB baru.
-4. Verifikasi version/datadir, readiness dan operasi aplikasi setelah restart.
-5. Runtime consumers dapat tetap enabled setelah provisioning. DBA mengembalikannya
-   ke nilai sebelum change jika diperlukan, bukan mematikan semua consumer tanpa audit.
+1. The team restores service/version/DBM propagation environment variables, socket
+   mounts, and images to the previous deployment revision. Environment/image/mount changes require recreation.
+2. Restore the pre-Datadog MySQL configuration or remove the additional mount through
+   the team's Compose deployment. Changing mounts requires MySQL recreation; with
+   unchanged mounts, a restart is sufficient for startup-only variables.
+3. **Preserve exactly the same database volume/data directory.** Do not use
+   `down -v`, prune volumes, remove the data directory, or initialize a new database.
+4. Verify version/datadir, readiness, and application operation after restarting.
+5. Runtime consumers may remain enabled after provisioning. The DBA restores their
+   prior values if necessary; do not disable all consumers without an audit.
 
-## SQL DBM yang tetap tertinggal
+## DBM SQL objects that remain
 
-Stop Agent/restore startup config tidak menghapus account monitoring, grants,
-schema `datadog`, procedure `datadog.explain_statement`, procedure runtime consumer,
-atau `<schema-aplikasi>.explain_statement`. Mereka tetap ada sampai DBA mengambil
-tindakan terpisah. Tidak ada password existing yang diputar script.
+Stopping the Agent or restoring startup configuration does not remove the monitoring
+account, grants, `datadog` schema, `datadog.explain_statement`, runtime consumer
+procedure, or `<application-schema>.explain_statement`. These remain until the DBA
+takes separate action. The script does not rotate existing passwords.
 
-DBA membandingkan inventory sebelum/ sesudah dan memastikan tidak ada monitoring
-lain yang memakai object tersebut. DBA dapat revoke grant/drop object **yang dibuat
-oleh change ini saja** bila tidak diperlukan, setelah review definer/dependency.
-Jangan menghapus schema aplikasi atau schema datadog existing secara massal.
-Pada provisioning gagal sebagian, baca keadaan account/routines; rerun memverifikasi
-object existing dan berhenti jika definisinya berbeda.
+The DBA compares before/after inventories and confirms no other monitoring uses
+these objects. After reviewing definers and dependencies, the DBA may revoke grants
+or drop objects **created by this change only** if no longer needed. Do not broadly
+delete application schemas or a pre-existing datadog schema. After partial
+provisioning failures, inspect account/routine state; reruns verify existing objects
+and stop on conflicting definitions.
 
-## RUM Apache
+## Apache RUM
 
-1. Pilih backup `rum-before-*` dengan container ID yang benar. Jika config test gagal,
-   jangan reload sebelum config berhasil diperbaiki. Installer vendor mungkin sudah
-   mengubah config; wrapper tidak menjamin transaksi atau rollback otomatis.
-2. Tim membandingkan Apache root dengan backup, restore hanya file yang diubah, lalu
-   disable/hapus Include/LoadModule atau symlink enable **yang ditambahkan installer**.
-   Menyalin backup di atas direktori existing saja tidak menghapus file baru.
-3. Pastikan virtual host, TLS, auth dan routing asli tetap ada. Jalankan Apache `-t`;
-   jika lulus lakukan graceful reload. Periksa request HTML normal tanpa injection.
-4. Jika RUM sudah dipersistenkan, revert image RUM ke revision sebelumnya atau lepaskan
-   mount RUM melalui deployment tim, lalu recreate web. Jangan menghapus asset yang
-   masih direferensikan container lain.
-5. SSI PHP/APM dapat tetap berjalan jika hanya RUM yang dirollback. Tidak perlu
-   menghapus PHP tracer manual karena paket ini tidak memasangnya.
-6. Restore pengaturan RUM production (tracing URLs/sampling) hanya jika bagian dari
-   change ini; simpan config sebelumnya. Application ID development tidak digunakan
-   sebagai pengganti.
+1. Select the `rum-before-*` backup with the correct container ID. If configuration
+   testing fails, do not reload until it is fixed. The vendor installer may already
+   have changed configuration; the wrapper does not guarantee transactional rollback.
+2. Compare the Apache root with the backup, restore only modified files, then
+   disable/remove Include/LoadModule entries or enabling symlinks **added by the installer**.
+   Copying a backup over an existing directory does not remove newly created files.
+3. Preserve original virtual hosts, TLS, authentication, and routing. Run Apache
+   `-t`; reload gracefully only if it passes. Check normal HTML requests without injection.
+4. If RUM was made persistent, revert the RUM image to its previous revision or remove
+   RUM mounts through the team's deployment, then recreate web containers. Do not
+   remove assets still referenced by other containers.
+5. PHP SSI/APM may remain active when rolling back only RUM. There is no manually
+   installed PHP tracer to remove because this package does not install one.
+6. Restore production RUM settings (tracing URLs/sampling) only if they were part
+   of this change; preserve previous settings. Do not substitute a development application ID.

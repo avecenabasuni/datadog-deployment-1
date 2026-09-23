@@ -1,6 +1,7 @@
-# Templates Datadog
+# Datadog templates
 
-Lihat [README utama](../README.md) untuk urutan production, parameter, handoff,
-referensi resmi dan batas verifikasi. PHP tracing memakai SSI host; tidak ada
-Dockerfile pemasangan tracer. Konfigurasi MySQL startup diterapkan oleh tim
-Sucofindo setelah review versi dan persistence data.
+See the [main README](../README.md) for the production workflow, parameters,
+handoffs, official references, and verification boundaries. PHP tracing uses
+host-based SSI; no tracer-installation Dockerfile is included. The Sucofindo team
+applies MySQL startup configuration after reviewing version compatibility and
+data persistence.
