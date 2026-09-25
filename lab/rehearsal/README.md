@@ -183,7 +183,7 @@ sudo docker stop eminerba-rehearsal-agent
 ```
 
 SSI masih terpasang pada host setelah stop. Untuk kembali bersih, gunakan snapshot
-awal atau [rollback SSI](../docs/ROLLBACK.md). Hindari prune dan `down -v` jika
+awal atau [rollback SSI](../../docs/ROLLBACK.md). Hindari prune dan `down -v` jika
 data ingin dipertahankan. Saat membuat ulang/menjalankan stack setelah instrumentasi,
 sertakan `/opt/eminerba-rehearsal/generated/production.override.json`; base Compose
 saja dapat menghilangkan konfigurasi instrumentasi. `prepare` bukan command resume

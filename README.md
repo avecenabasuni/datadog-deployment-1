@@ -27,7 +27,7 @@ See the [full prerequisites](docs/DEPLOYMENT.md#package-and-prerequisites).
 ## Getting started
 
 Testing without the original application images? Start with the
-[production-layout rehearsal](lab/PRODUCTION-REHEARSAL.md) to test the same coordinator
+[production-layout rehearsal](lab/rehearsal/README.md) to test the same coordinator
 with dummy PHP/MySQL applications and `env:lab`:
 
 ```bash
@@ -84,6 +84,21 @@ or legacy `docker-compose`. The lab's `dc` helper uses this wrapper.
 - Runtime security, network monitoring, and USM are separate options requiring privilege review.
 - RUM installed through `exec` is not persistent until the image/mount handoff is complete.
 - Local verification does not prove end-to-end telemetry or production deployment success.
+
+## Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `scripts/` | Production automation, Compose helper, and stable command entry points |
+| `config/` | Configuration examples and ignored local configuration/secrets |
+| `datadog/` | Datadog configuration and SQL templates |
+| `lab/rehearsal/` | Production-layout lab implementation, Docker templates, and guide |
+| `lab/` | Original staged lab and dummy PHP/MySQL assets shared with rehearsal |
+| `docs/` | Production runbooks, validation, rollback, and test results |
+| `tests/` | Offline checks and optional local tool integration tests |
+
+Existing lab configuration paths and generated `/opt/eminerba-rehearsal/` paths
+remain unchanged. Use `scripts/eminerba-lab` as the rehearsal entry point.
 
 ## Documentation
 

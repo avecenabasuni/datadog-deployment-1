@@ -9,6 +9,8 @@ import secrets
 import sys
 import time
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+
 import datadog_deploy as d
 import eminerba_production as p
 
@@ -63,7 +65,7 @@ def create_fixture(stack):
              "pit_to_port/index.php": (d.ROOT / "lab/web/index.php").read_text(encoding="utf-8"),
              "apiminerba/index.php": (d.ROOT / "lab/api/index.php").read_text(encoding="utf-8")}
     for name in ("DockerFile", "apache.conf", "php.ini", "my.cnf"):
-        files["docker/" + name] = (d.ROOT / "lab/production" / name).read_text(encoding="utf-8")
+        files["docker/" + name] = (Path(__file__).resolve().parent / "docker" / name).read_text(encoding="utf-8")
     for folder in ("pit_to_port", "apiminerba"):
         files[folder + "/health.php"] = (d.ROOT / "lab/common/health.php").read_text(encoding="utf-8")
     files["docker/001-seed.sql"] = ((d.ROOT / "lab/mysql/001-seed.sql").read_text(encoding="utf-8") +

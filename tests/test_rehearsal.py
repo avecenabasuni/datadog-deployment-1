@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 from test_deploy import ROOT, d
 from test_production import p
 
-spec = importlib.util.spec_from_file_location("rehearsal", ROOT / "scripts/eminerba_lab.py")
+spec = importlib.util.spec_from_file_location("rehearsal", ROOT / "lab/rehearsal/manage.py")
 lab = importlib.util.module_from_spec(spec)
 with patch.dict(sys.modules, {"datadog_deploy": d, "eminerba_production": p}):
     spec.loader.exec_module(lab)

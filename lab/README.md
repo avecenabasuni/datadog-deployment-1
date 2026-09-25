@@ -1,7 +1,7 @@
 # Ubuntu instrumentation lab
 
 For the production layout and one-command deployment, use the newer
-[production-layout rehearsal](PRODUCTION-REHEARSAL.md). This page retains the
+[production-layout rehearsal](rehearsal/README.md). This page retains the
 original manual staged fixture; do not run both fixtures/Agents on the same VM.
 
 A standalone test stack, not a copy of Sucofindo's deployment. It contains three
