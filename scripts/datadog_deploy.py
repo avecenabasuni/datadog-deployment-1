@@ -184,7 +184,8 @@ class Deployment:
             "managed": 'index .Config.Labels "id.sucofindo.datadog.managed"',
             "spec": 'index .Config.Labels "id.sucofindo.datadog.spec"',
         }
-        return {k: json.loads(self.docker("inspect", "--format", "{{json " + expr + "}}", name))
+        # Parentheses make index lookups a single argument to Go's json function.
+        return {k: json.loads(self.docker("inspect", "--format", "{{json (" + expr + ")}}", name))
                 for k, expr in fields.items()}
 
     def discover(self):

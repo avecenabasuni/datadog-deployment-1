@@ -1,5 +1,15 @@
 # Local test results
 
+## Discovery template regression check — 25 September 2026
+
+- All 44 tests passed on Windows with Python 3.12 and Go available.
+- Inspect expressions now group label lookups before JSON encoding, fixing
+  `wrong number of args for json: want 1 got 3` during discovery/preflight.
+- The new regression test executes the generated templates with Go's template
+  engine for populated, empty, and null label maps. It skips when Go is absent;
+  Go is only a test dependency, not a deployment prerequisite.
+- Docker deployment on the Ubuntu VM still requires validation.
+
 Last checked: 23 September 2026, using a Windows workspace, Python 3.14, and
 Git Bash. These tests did not involve deployment, SSH access, production
 credentials, or a Docker daemon.

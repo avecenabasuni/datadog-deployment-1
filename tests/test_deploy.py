@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -67,6 +68,31 @@ class DeploymentTests(unittest.TestCase):
 
     def test_valid_config(self):
         d.validate(config(), full=True)
+
+    @unittest.skipUnless(shutil.which("go"), "Go required to evaluate Docker templates")
+    def test_inspect_templates_execute_with_present_missing_and_null_labels(self):
+        self.runner.response = "null"
+        field_names = list(self.app.inspect("test-container"))
+        templates = []
+        for args, _ in self.runner.calls:
+            self.assertEqual(args[:3], ["docker", "inspect", "--format"])
+            self.assertEqual(args[-1], "test-container")
+            self.assertNotIn(".Config.Env", args[3])
+            templates.append(args[3])
+        labels = {
+            "com.docker.compose.service": "web",
+            "com.docker.compose.project": "lab",
+            "id.sucofindo.datadog.managed": "true",
+            "id.sucofindo.datadog.spec": 'hash-with-"quote',
+        }
+        for sample in (labels, {}, None):
+            with self.subTest(labels=sample):
+                result = subprocess.run(["go", "run", str(ROOT / "tests/inspect_templates.go")],
+                                        input=json.dumps({"Templates": templates, "Labels": sample}),
+                                        check=True, capture_output=True, text=True, timeout=120)
+                values = dict(zip(field_names, map(json.loads, result.stdout.splitlines())))
+                for field, label in zip(("service", "project", "managed", "spec"), labels):
+                    self.assertEqual(values[field], (sample or {}).get(label, ""))
 
     def test_reject_invalid_input(self):
         for key, val in (("web_container", "REPLACE_WEB"), ("network", "--host"),
