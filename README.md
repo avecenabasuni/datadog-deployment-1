@@ -15,6 +15,17 @@ sudo bash scripts/eminerba-production --maintenance
 This command recreates web/API/database containers during maintenance and preserves
 their existing mounts. Read its setup and validation requirements before use.
 
+Deployment stops on failure. Explicit [application rollback](docs/ROLLBACK.md)
+restores original images and mounts while preserving database contents:
+
+```bash
+sudo bash scripts/eminerba-production rollback --dry-run
+sudo bash scripts/eminerba-production rollback --maintenance
+```
+
+It requires the recovery baseline created by apply. Host SSI, the Agent, and DBM
+SQL objects have separate rollback procedures; they are not automatically undone.
+
 ## Prerequisites
 
 - Ubuntu host, local rootful Docker, Bash, Python ≥3.8, and administrator access.
@@ -101,6 +112,8 @@ Existing lab configuration paths and generated `/opt/eminerba-rehearsal/` paths
 remain unchanged. Use `scripts/eminerba-lab` as the rehearsal entry point.
 
 ## Documentation
+
+- [Finalization status and required recovery rehearsal](docs/RELEASE-READINESS.md)
 
 - [Deployment runbook, technical details, and official references](docs/DEPLOYMENT.md)
 - [Eminerba production coordinator and one-time setup](docs/EMINERBA-PRODUCTION.md)

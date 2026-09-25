@@ -92,7 +92,8 @@ It executes these steps and stops at the first failure:
    shared network, Agent ownership and reviewed installer hashes. Compare base
    Compose environment values with the live containers using in-memory hashes;
    changed credentials/environment stop deployment without printing their values.
-2. Render settings. Tag the exact running image IDs locally. Build derived web/API
+2. Save a private recovery baseline before changing containers or host installers.
+   Render settings. Tag the exact running image IDs locally. Build derived web/API
    images with missing curl/tar/gzip/GPG packages as needed; do not rebuild the
    application or pull a new PHP/MySQL base image.
 3. Start the managed Agent and install/reuse host SSI.
@@ -131,8 +132,22 @@ configuration secrets and must not be published. Future Apache/vhost changes mus
 be reconciled with these exported mounts; an app image rebuild alone does not
 update the mounted Apache configuration.
 
-On failure, the message names the stage. There is no automatic rollback of SQL,
-SSI or Apache changes. Inspect the failed stage before retrying; in particular,
+On failure, the message and `deployment-status.json` name the stage. There is no
+automatic rollback. Explicit application recovery is available:
+
+```bash
+sudo bash scripts/eminerba-production rollback --dry-run
+sudo bash scripts/eminerba-production rollback --maintenance
+```
+
+This restores original image IDs and base mounts using `runc`, preserving database
+contents and disabling tracing. It requires `recovery.json`, local original images,
+and unchanged base Compose/.env. It leaves Agent, host SSI and DBM SQL objects in
+place. Read the [recovery scope and failure guide](ROLLBACK.md) before using it.
+Keep `recovery.json`, image tags, configuration and exports until acceptance and
+the recovery retention period are complete. The metadata is not a database backup.
+
+Inspect the failed stage before retrying; in particular,
 an interrupted RUM installation with no saved persistence state requires manual
 review/export before adoption. Do not delete state or rotate credentials simply
 to bypass a refusal. Use the [component rollback runbook](ROLLBACK.md) and recorded

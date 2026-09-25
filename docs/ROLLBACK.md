@@ -1,4 +1,89 @@
-# Component-level rollback
+# Application recovery and component rollback
+
+## Eminerba application rollback command
+
+Deployment stops on failure. **Rollback is explicit, not automatic.** A failed
+installer can leave changes or downstream processes behind; inspect the failed
+stage before starting recovery. Never run deployment, standalone stages, Docker
+maintenance, and rollback concurrently. The coordinator lock serializes its own
+apply/rollback and rehearsal commands, not external Docker commands or standalone
+`datadog-bootstrap` stages.
+
+For production, from the repository:
+
+```bash
+sudo bash scripts/eminerba-production rollback --dry-run
+sudo bash scripts/eminerba-production rollback --maintenance
+```
+
+For the generated lab:
+
+```bash
+sudo bash scripts/eminerba-lab rollback --dry-run
+sudo bash scripts/eminerba-lab rollback --maintenance
+```
+
+Apply now records a private `recovery.json` before container/host changes. It
+contains the base Compose model hash, project, original image IDs and mount
+mapping, not a database backup or resolved credentials. It is retained on reruns.
+Original images receive local recovery tags; do not prune them. Older deployments
+without this file require the manual procedure below. A subsequent healthy apply
+can create it using the original image aliases in existing production state.
+Do not run a broken deployment merely to manufacture a recovery file.
+
+The rollback command works with stopped or missing application containers and
+does not require Agent health, installer downloads, or working PHP preflight. It
+checks local rootful Docker, unchanged Compose/.env, image availability, container
+ownership, existing bind paths and named volumes before recreating anything.
+Missing volumes are an error; recovery must not initialize an empty replacement.
+
+It recreates DB first using the original image and data mount, waits for SQL,
+verifies image/runtime/mounts, then recreates API and web. All use `runc` with
+`DD_INSTRUMENT_SERVICE_WITH_APM=false` and `DD_TRACE_ENABLED=false`. Original base
+mounts remain; the coordinator's extra MySQL, socket, and RUM mounts are omitted.
+Apache configuration tests run on API/web. There is no image build or database
+restore. MySQL is restarted, so this is a maintenance operation with downtime.
+
+After completion, verify login, a read-only business request, API/database access,
+and application logs. Container readiness and Apache syntax are not business
+acceptance. For subsequent uninstrumented Compose operations, use the same project,
+base Compose and generated `rollback.override.json`; do not also include
+`production.override.json`. Applying observability again uses the apply command
+after the failure cause has been fixed and the dry-run passes.
+
+**What application rollback does not reverse:**
+
+- Database contents, DBM users/grants/procedures and runtime consumer changes.
+- Host SSI packages, Docker default runtime, Agent or shared socket directory.
+- Changes to bind-mounted source files, `.env`, `my.cnf`, or uploaded application data.
+- Unrecorded edits inside a container's writable layer; original images do not
+  contain these. Export required changes before any apply/recreation.
+- Datadog-side settings or telemetry already ingested.
+
+Use the component procedures below for these. Never restore a stale database
+backup automatically: that can discard transactions written after deployment.
+If Docker cannot start, recover the host runtime first. If the base Compose/.env
+has changed, manually reconcile it with the recorded baseline before recovery;
+do not edit hashes to bypass checks.
+
+## Failure decision guide
+
+| Failed stage | Next action |
+| --- | --- |
+| Preflight | Correct configuration or missing schema; no deployment changes have started |
+| Recovery snapshot/render/image preparation | Inspect artifacts/build failure; application recreation has not started |
+| Agent / SSI | Inspect Agent and host runtime; resolve a partial installer before retry or host rollback |
+| DB recreation / readiness | Inspect DB logs locally; use application rollback if Docker and original data/image are available |
+| DBM SQL | Inspect partial grants/procedures; rollback containers does not undo SQL |
+| API/web or RUM | Use application rollback to remove added mounts and restore original images; inspect host installer processes first |
+| Verify / smoke | Diagnose application and observability separately; successful container start is not telemetry acceptance |
+| Rollback itself | Stop and inspect the reported stage; no automatic rollback of rollback |
+
+`deployment-status.json` records the last stage and status without command output
+or credentials. Ctrl-C and handled errors record interruption/failure. Power loss
+or SIGKILL can leave `running`; this means the final outcome is unknown, not success.
+
+## Manual component procedures
 
 The Sucofindo team performs rollback during an approved maintenance window.
 No subcommand deletes database volumes or data. Record configuration, image, and

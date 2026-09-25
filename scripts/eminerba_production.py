@@ -69,10 +69,25 @@ class Production:
         self.override = app.out / "production.override.json"
         self.state_path = app.out / "production-state.json"
         self.lab = lab
+        self.journal_enabled = False
 
     def step(self, name):
         self.stage = name
         print("\n[" + ("lab rehearsal" if self.lab else "production") + "] " + name, flush=True)
+        if self.journal_enabled:
+            self.record_status("running")
+
+    def record_status(self, status):
+        d.secure_write(self.app.out / "deployment-status.json", d.jdump({
+            "status": status, "stage": self.stage, "project": self.project,
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}))
+
+    def select_backend(self):
+        if self.app.r.run(["docker", "compose", "version"], check=False).returncode == 0:
+            self.backend = ["docker", "compose"]
+        else:
+            self.app.run(["docker-compose", "version"])
+            self.backend = ["docker-compose"]
 
     def compose(self, *args, overlay=False):
         command = self.backend + ["--project-directory", str(self.directory), "-p", self.project,
@@ -106,6 +121,8 @@ class Production:
             d.need(self.c[role + "_container"] == container and item["service"] == service,
                    "Production mapping differs for " + role)
             spec = model["services"][service]
+            d.need(spec.get("pull_policy") in (None, "missing", "if_not_present", "never"),
+                   "Compose pull_policy can replace pinned images: " + service)
             d.need(spec.get("container_name") == container, "Compose container_name differs: " + service)
             expected = dict(mount_source(model, self.project, mount, self.directory)
                             for mount in spec.get("volumes", []))
@@ -170,7 +187,8 @@ class Production:
             d.need(sources, "Missing Compose source labels: " + role)
             actual_files = {str(Path(value).resolve()) for value in sources.split(",")}
             d.need(str(self.compose_file) in actual_files and
-                   actual_files <= {str(self.compose_file), str(self.override)},
+                   actual_files <= {str(self.compose_file), str(self.override),
+                                    str(self.app.out / "rollback.override.json")},
                    "Container uses different/additional Compose files: " + role)
         inv = report["inventory"]
         d.need(not inv["host_agent_active"], "Existing host Agent; resolve ownership before deployment.")
@@ -180,11 +198,7 @@ class Production:
             agent = self.app.inspect(self.c["agent_name"])
             d.need(agent["managed"] == "true" and agent["running"], "Existing Agent is not a running managed Agent.")
         d.need(not inv["ssi_packages"] or inv["default_runtime"] == "dd-shim", "Partial SSI installation; review before retry.")
-        if self.app.r.run(["docker", "compose", "version"], check=False).returncode == 0:
-            self.backend = ["docker", "compose"]
-        else:
-            self.app.run(["docker-compose", "version"])
-            self.backend = ["docker-compose"]
+        self.select_backend()
         self.state = d.read_json(self.state_path, secret=True) if self.state_path.exists() else {}
         model = self.model()
         self.validate_stack(report, model)
@@ -279,6 +293,9 @@ class Production:
                   "recreate API/web -> RUM -> persist RUM -> recreate web -> verify/smoke.")
             print("No deployment changes made. This is not end-to-end acceptance.")
             return
+        from eminerba_recovery import snapshot
+        snapshot(self, report)
+        self.journal_enabled = True
         self.step("render and prepare application images")
         self.app.render(report)
         overlay = d.read_json(self.app.out / "application.override.json")
@@ -328,6 +345,7 @@ class Production:
         self.step("verify after recreation and HTTP smoke")
         self.app.verify(self.app.preflight(full=True))
         self.app.smoke()
+        self.record_status("local_checks_passed")
         print("LOCAL CHECKS PASSED. Browser RUM, real HTTP PHP tracing, and DBM correlation remain manual acceptance.")
         print("Keep the production override in future Compose operations: " + str(self.override))
 
@@ -378,7 +396,7 @@ def prepare(config_path, secret_path, compose_file, lab=False):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("prepare", "apply"), nargs="?", default="apply")
+    parser.add_argument("action", choices=("prepare", "apply", "rollback"), nargs="?", default="apply")
     parser.add_argument("--compose-file")
     parser.add_argument("--config", type=Path)
     parser.add_argument("--secrets", type=Path)
@@ -394,7 +412,7 @@ def main(argv=None):
     coordinator = None
     try:
         d.need(sys.platform.startswith("linux") and os.geteuid() == 0, "Run on the target Ubuntu host using sudo.")
-        if args.action == "apply":
+        if args.action in ("apply", "rollback"):
             d.need(args.dry_run or args.maintenance, "Application/DB recreation requires --maintenance.")
         # Serialize runs across configurations; no competing installer processes.
         import fcntl
@@ -410,11 +428,22 @@ def main(argv=None):
             c = d.read_json(args.config)
             credentials = d.read_json(args.secrets, secret=True)
             coordinator = Production(d.Deployment(c, credentials), args.compose_file, lab=args.lab)
-            coordinator.run(dry=args.dry_run)
+            if args.action == "rollback":
+                from eminerba_recovery import rollback
+                rollback(coordinator, dry=args.dry_run)
+            else:
+                coordinator.run(dry=args.dry_run)
         return 0
-    except (d.Failure, OSError, ValueError, KeyError, TypeError, IndexError) as exc:
+    except (d.Failure, OSError, ValueError, KeyError, TypeError, IndexError, KeyboardInterrupt) as exc:
+        if coordinator and coordinator.journal_enabled:
+            try:
+                coordinator.record_status("interrupted" if isinstance(exc, KeyboardInterrupt) else "failed")
+            except (d.Failure, OSError):
+                pass
         stage = coordinator.stage if coordinator else "setup"
-        message = str(exc) if isinstance(exc, d.Failure) else "Invalid local configuration/data; details withheld to protect secrets."
+        message = ("Interrupted by operator; inspect partial changes before recovery." if isinstance(exc, KeyboardInterrupt)
+                   else str(exc) if isinstance(exc, d.Failure)
+                   else "Invalid local configuration/data; details withheld to protect secrets.")
         print("ERROR " + ("lab rehearsal" if args.lab else "production") + " " + stage + ": " + message, file=sys.stderr)
         print("Stopped; no automatic rollback or volume deletion. Inspect the failed stage before rerunning.", file=sys.stderr)
         return 1

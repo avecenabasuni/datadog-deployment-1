@@ -166,6 +166,18 @@ hanya membuktikan pemeriksaan lokal, bukan semua telemetry/korelasi.
 
 ## Batas pengujian dan menghentikan lab
 
+Untuk menguji pemulihan aplikasi setelah apply versi terbaru:
+
+```bash
+sudo bash scripts/eminerba-lab rollback --dry-run
+sudo bash scripts/eminerba-lab rollback --maintenance
+```
+
+Ini mempertahankan data dummy dan mengembalikan image/mount awal dengan tracing
+dinonaktifkan. Agent, SSI host, dan objek DBM tetap ada. Uji kembali halaman lab
+dan request SQL. Lihat [cakupan rollback](../../docs/ROLLBACK.md). Deployment lama
+tanpa `recovery.json` menggunakan prosedur manual; metadata ini bukan backup DB.
+
 Fixture ini meniru topologi dan mount production. Aplikasi dummy menggunakan PDO;
 tidak membuktikan perilaku CodeIgniter, MySQLi, autentikasi, proxy production, atau
 CORS lintas origin. Data hanya dua schema contoh, bukan salinan data production.

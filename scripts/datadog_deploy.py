@@ -51,6 +51,11 @@ def jdump(value):
     return json.dumps(value, indent=2, ensure_ascii=False) + "\n"
 
 
+def docker_endpoint(context_endpoint):
+    # Docker CLI gives an explicit DOCKER_CONTEXT priority over DOCKER_HOST.
+    return context_endpoint if os.environ.get("DOCKER_CONTEXT") else os.environ.get("DOCKER_HOST") or context_endpoint
+
+
 def identifier(value):
     need(isinstance(value, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", value),
          "Identifier SQL tidak valid.")
@@ -239,7 +244,7 @@ class Deployment:
         # Docker context/DOCKER_HOST may target another machine. Host mounts and SSI
         # are safe only when talking to the daemon on this host.
         endpoint = self.docker("context", "inspect", "--format", "{{.Endpoints.docker.Host}}")
-        effective_endpoint = os.environ.get("DOCKER_HOST", endpoint)
+        effective_endpoint = docker_endpoint(endpoint)
         need(effective_endpoint == "unix://" + c["docker_socket"],
              "Docker endpoint bukan socket lokal yang dikonfigurasi; jangan jalankan SSI ke daemon remote.")
         selected = {role: self.inspect(c[role + "_container"]) for role in ("web", "api", "mysql")}

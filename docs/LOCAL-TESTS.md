@@ -1,5 +1,21 @@
 # Local test results
 
+## Finalization and explicit recovery — 25 September 2026
+
+95 tests ran locally: 94 passed and one POSIX symlink test was skipped on Windows.
+Bash entry-point syntax, Python 3.8 grammar compatibility, local Markdown link
+targets, and CLI help checks passed. Python 3.8 runtime execution and legacy
+Compose 1.29 recovery have not been exercised locally.
+
+The recovery regression suite covers immutable baseline retention, stopped
+containers, changed Compose/environment, foreign containers, mount drift, missing
+volumes/images, local Docker endpoint selection, maintenance gating, and stopping
+before application recreation when database recovery fails. A real Docker Compose
+parser checks the generated recovery overlay, image IDs, runtime and retained
+mounts. Container recreation, SQL readiness, and Apache execution remain mocked.
+The operator reported success for the earlier lab apply; the new rollback has not
+yet been executed on that VM. Follow [the recovery rehearsal](RELEASE-READINESS.md).
+
 ## Lab auxiliary schema repair — 25 September 2026
 
 83 tests ran locally: 82 passed and one POSIX symlink test was skipped on Windows.

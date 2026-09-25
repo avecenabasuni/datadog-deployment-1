@@ -23,6 +23,15 @@ or user request bodies. Status remains unaccepted until runtime and telemetry ev
 
 ## After the recreation handoff
 
+- [ ] Rehearse application rollback on a disposable VM, verify read-only business
+  requests afterward, and reapply successfully before production maintenance.
+- [ ] Preserve `recovery.json`, original image tags, Compose/.env, generated state,
+  and a separately tested database backup. Recovery metadata is not a data backup.
+- [ ] Assign an operator for host SSI/Agent and DBA recovery; confirm the downtime
+  window and ensure no other deployment or installer process is running.
+- [ ] Confirm production containers have no required changes only in their writable
+  layers; pin/build/export those changes before any container recreation.
+
 - [ ] Docker's default runtime is `dd-shim`; **new** web/API containers use it.
 - [ ] PHP tracer >=1.6 is present in the HTTP SAPI; CLI checks do not replace request tests.
 - [ ] Web/API workers receive DD_ENV=prod, service/version, and DBM propagation settings.

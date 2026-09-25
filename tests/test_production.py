@@ -18,6 +18,10 @@ p = importlib.util.module_from_spec(spec)
 with patch.dict(sys.modules, {"datadog_deploy": d}):
     spec.loader.exec_module(p)
 
+sys.path.insert(0, str(ROOT / "scripts"))
+with patch.dict(sys.modules, {"datadog_deploy": d, "eminerba_production": p}):
+    import eminerba_recovery as recovery
+
 
 class ProductionTests(unittest.TestCase):
     def setUp(self):
@@ -83,6 +87,12 @@ class ProductionTests(unittest.TestCase):
     def test_legacy_mount_syntax_preserves_existing_named_volume(self):
         target, source = p.mount_source(self.model, self.flow.project, "mysql_data:/var/lib/mysql:rw", self.root)
         self.assertEqual((target, source), ("/var/lib/mysql", ("volume", "actual-project_mysql_data")))
+
+    def test_base_pull_policy_cannot_override_pinned_images(self):
+        for policy in ("always", "build", "daily", "every_12h"):
+            self.model["services"]["db"]["pull_policy"] = policy
+            with self.assertRaisesRegex(d.Failure, "pull_policy"):
+                self.flow.validate_stack(self.report, self.model)
 
     def test_compose_uses_live_project_and_explicit_files_env(self):
         (self.root / ".env").write_text("PRIVATE=do-not-print")
@@ -309,6 +319,7 @@ class ProductionTests(unittest.TestCase):
             if events.count("recreate-web") == 2:
                 self.assertIn(str(export / "apache") + ":/etc/apache2:ro", overlay["services"]["web"]["volumes"])
         with patch.object(self.flow, "check", return_value=self.report), \
+                patch("eminerba_recovery.snapshot"), \
                 patch.object(self.flow, "images", return_value={"web": "pinned-web", "api": "pinned-api", "db": "pinned-db"}), \
                 patch.object(self.flow, "compose"), patch.object(self.flow, "recreate", side_effect=recreate), \
                 patch.object(self.flow, "wait_database", side_effect=lambda: events.append("ready")), \

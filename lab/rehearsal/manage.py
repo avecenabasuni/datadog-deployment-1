@@ -103,7 +103,7 @@ def repair(stack=STACK, config_path=CONFIG, secret_path=SECRETS, dry=False):
            "Repair supports only the generated dummy lab, not production/custom schemas.")
     app = d.Deployment(c, d.read_json(secret_path, secret=True))
     endpoint = app.docker("context", "inspect", "--format", "{{.Endpoints.docker.Host}}")
-    d.need(os.environ.get("DOCKER_HOST", endpoint) == "unix:///var/run/docker.sock", "Repair requires the local lab Docker socket.")
+    d.need(d.docker_endpoint(endpoint) == "unix:///var/run/docker.sock", "Repair requires the local lab Docker socket.")
     security = json.loads(app.docker("info", "--format", "{{json .SecurityOptions}}")) or []
     d.need(not any("rootless" in value for value in security), "Repair requires rootful Docker.")
     item = app.inspect("eminerba_db")
@@ -113,7 +113,8 @@ def repair(stack=STACK, config_path=CONFIG, secret_path=SECRETS, dry=False):
         '{{json (index .Config.Labels "com.docker.compose.project.config_files")}}', "eminerba_db"))
     files = {str(Path(value).resolve()) for value in (sources or "").split(",")}
     base = str((stack / "docker-compose.yml").resolve())
-    d.need(base in files and files <= {base, str((stack.parent / "generated/production.override.json").resolve())},
+    d.need(base in files and files <= {base, str((stack.parent / "generated/production.override.json").resolve()),
+                                      str((stack.parent / "generated/rollback.override.json").resolve())},
            "Database Compose source differs from the generated fixture.")
     d.need(any(m["Destination"] == "/var/lib/mysql" and m["Type"] == "volume" and
                m.get("Name") == p.LAB_PROJECT + "_mysql_data" and m.get("RW") for m in item["mounts"]),
@@ -143,7 +144,7 @@ def prepare(stack=STACK, config_path=CONFIG, secret_path=SECRETS, runner=None):
     info = json.loads(run(["docker", "info", "--format", "{{json .}}"] ))
     d.need(not any("rootless" in value for value in info.get("SecurityOptions", [])), "Lab needs rootful Docker.")
     endpoint = run(["docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"])
-    d.need(os.environ.get("DOCKER_HOST", endpoint) == "unix:///var/run/docker.sock", "Use this VM's local Docker socket.")
+    d.need(d.docker_endpoint(endpoint) == "unix:///var/run/docker.sock", "Use this VM's local Docker socket.")
     names = set(run(["docker", "ps", "-a", "--format", "{{.Names}}"] ).splitlines())
     allowed = {container for _, container in p.MAPPING.values()} | {p.LAB_PROJECT + "-agent"}
     d.need(not names - allowed,
@@ -193,12 +194,12 @@ def prepare(stack=STACK, config_path=CONFIG, secret_path=SECRETS, runner=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", nargs="?", choices=("prepare", "apply", "repair"), default="apply")
+    parser.add_argument("action", nargs="?", choices=("prepare", "apply", "repair", "rollback"), default="apply")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--maintenance", action="store_true")
     args = parser.parse_args(argv)
-    if args.action == "apply":
-        command = ["apply", "--lab"]
+    if args.action in ("apply", "rollback"):
+        command = [args.action, "--lab"]
         if args.dry_run:
             command.append("--dry-run")
         if args.maintenance:

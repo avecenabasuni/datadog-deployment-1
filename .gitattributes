@@ -1,3 +1,6 @@
 *.sh text eol=lf
 scripts/datadog-bootstrap text eol=lf
+scripts/compose text eol=lf
+scripts/eminerba-production text eol=lf
+scripts/eminerba-lab text eol=lf
 *.py text eol=lf
