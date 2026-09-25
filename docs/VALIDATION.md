@@ -19,7 +19,7 @@ or user request bodies. Status remains unaccepted until runtime and telemetry ev
 - [ ] Review both installer entry scripts and transitive downloads; record hashes. RUM configurator help recognizes all required flags.
 - [ ] Allow HTTPS/TLS egress to registries, installers, Datadog intake, and RUM CDN/intake without disabling TLS verification.
 - [ ] Review security/CNM/USM options and host privileges separately; owners approve telemetry scope and billing.
-- [ ] Review snippet merges with `docker-compose ... config -q`; do not print full configuration that may contain secrets.
+- [ ] Review snippet merges with `sudo bash scripts/compose ... config -q`; do not print full configuration that may contain secrets.
 
 ## After the recreation handoff
 

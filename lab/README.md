@@ -11,7 +11,8 @@ This exercises instrumentation, not CodeIgniter-specific behavior.
 
 ## Safety and prerequisites
 
-- Use a dedicated Ubuntu 22.04/24.04 VM with rootful Docker and `docker-compose`.
+- Use a dedicated Ubuntu 22.04/24.04 VM with rootful Docker and either
+  `docker compose` or `docker-compose`.
   Start with roughly 4 vCPUs, 8 GB RAM, and 25 GB free disk; adjust after measuring.
 - Take a VM snapshot before SSI. SSI changes the host Docker runtime and can affect
   other containers on that VM. Do not share the VM with production workloads.
@@ -59,7 +60,7 @@ environment file, and automation configuration consistent:
 
 ```bash
 dc() {
-  sudo docker-compose --env-file "$PWD/lab/.env" -p eminerba-lab \
+  sudo bash scripts/compose --env-file "$PWD/lab/.env" -p eminerba-lab \
     -f "$PWD/lab/docker-compose.yml" "$@"
 }
 dd_lab() {
@@ -72,6 +73,11 @@ dc up -d
 dc ps
 curl --fail --max-time 15 http://127.0.0.1:8080/api/
 ```
+
+The `scripts/compose` wrapper automatically prefers `docker compose` and falls
+back to `docker-compose` when the plugin is unavailable. All `dc` commands below
+work with either installation. A failed deployment command is returned directly;
+it is not retried with the other Compose implementation.
 
 MySQL health checks allow up to approximately five minutes for first initialization.
 If it fails, inspect `dc logs --tail=80 eminerba-db` locally; redact logs before sharing.

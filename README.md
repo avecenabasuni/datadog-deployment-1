@@ -56,7 +56,8 @@ Do not execute all stages as an unattended batch without review.
 | RUM | Install, test configuration, and hand off persistent image/mount changes |
 | Validation | Retest after recreation; prove telemetry and correlation in Datadog |
 
-Compose examples use `docker-compose`.
+Use `sudo bash scripts/compose ...` for automatic selection of `docker compose`
+or legacy `docker-compose`. The lab's `dc` helper uses this wrapper.
 
 ## Safety boundaries
 

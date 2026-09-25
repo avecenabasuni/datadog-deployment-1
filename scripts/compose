@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Prefer the Docker Compose plugin, with standalone Compose as a fallback.
+set -euo pipefail
+
+if docker compose version >/dev/null 2>&1; then
+  exec docker compose "$@"
+elif docker-compose version >/dev/null 2>&1; then
+  exec docker-compose "$@"
+else
+  printf '%s\n' 'Docker Compose tidak tersedia. Install docker compose atau docker-compose.' >&2
+  exit 127
+fi

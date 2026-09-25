@@ -46,7 +46,8 @@ The package does not change application drivers.
 
 Host tools: Python 3, Bash, local rootful Docker CLI/daemon, curl, tar, sha256sum,
 dpkg-query, and systemctl. SSI installation requires root; Docker socket access
-requires administrator privileges. Team deployment commands use **`docker-compose`**.
+requires administrator privileges. Use `sudo bash scripts/compose` to automatically
+select **`docker compose`**, with **`docker-compose`** as a fallback.
 Agent automation uses Docker CLI directly and does not depend on the team's Compose
 file. Remote/rootless Docker daemons are rejected to avoid installing SSI on a
 different host from the containers. Also review container distribution/architecture compatibility.
@@ -135,10 +136,10 @@ new versioned output directory and a reviewed migration. Identical mount files r
 their inodes. Store output persistently, not under `/tmp`.
 
 **First handoff:** the Sucofindo team reviews snippet merging with its Compose file.
-Run validation from the actual Compose deployment directory:
+Run validation from the package root, using the actual team's Compose file path:
 
 ```bash
-docker-compose -f <team-compose.yml> -f <output-dir>/application.override.json config -q
+sudo bash scripts/compose -f <team-compose.yml> -f <output-dir>/application.override.json config -q
 ```
 
 Adjust the top-level `version` if a legacy `docker-compose` binary requires it.
