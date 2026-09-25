@@ -153,6 +153,44 @@ class DeploymentTests(unittest.TestCase):
         with self.assertRaises(d.Failure):
             self.app.render(self.report)
 
+    def test_render_mysql_config_permissions_and_existing_mount_inode(self):
+        original_chmod = Path.chmod
+        changes = []
+        def record_chmod(path, mode):
+            changes.append((path, mode))
+            original_chmod(path, mode)
+        with patch.object(Path, "chmod", record_chmod):
+            self.app.render(self.report)
+        cnf = self.app.out / "99-datadog.cnf"
+        self.assertEqual(changes, [(cnf, 0o644)])
+        if os.name != "nt":
+            self.assertEqual(cnf.stat().st_mode & 0o777, 0o644)
+        cnf.chmod(0o600)
+        before = cnf.stat()
+        changes.clear()
+        with patch.object(Path, "chmod", record_chmod):
+            self.app.render(self.report)
+        self.assertEqual(changes, [(cnf, 0o644)])
+        self.assertEqual(cnf.stat().st_ino, before.st_ino)
+        self.assertEqual(cnf.stat().st_mtime_ns, before.st_mtime_ns)
+        if os.name != "nt":
+            self.assertEqual(cnf.stat().st_mode & 0o777, 0o644)
+            for name in ("mysql.d/conf.yaml", "agent-spec.json"):
+                self.assertEqual((self.app.out / name).stat().st_mode & 0o777, 0o600)
+
+    @unittest.skipIf(os.name == "nt", "Symlink creation requires Windows privileges")
+    def test_render_rejects_mysql_config_symlink(self):
+        self.app.render(self.report)
+        cnf = self.app.out / "99-datadog.cnf"
+        target = self.app.out / "private.cnf"
+        target.write_text(cnf.read_text())
+        target.chmod(0o600)
+        cnf.unlink()
+        cnf.symlink_to(target)
+        with self.assertRaisesRegex(d.Failure, "symlink"):
+            self.app.render(self.report)
+        self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+
     def test_missing_compose_label_requires_explicit_mapping(self):
         self.report["selected"]["web"]["service"] = None
         with self.assertRaises(d.Failure):

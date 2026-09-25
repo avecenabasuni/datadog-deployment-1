@@ -1,5 +1,14 @@
 # Local test results
 
+## MySQL startup configuration permissions — 25 September 2026
+
+- Windows suite: 48 tests run, 47 passed, one POSIX symlink test skipped.
+- Rendering sets the non-secret `99-datadog.cnf` to 0644 so the container's
+  MySQL user can read it. Rerender repairs older 0600 files in place, preserving
+  their bind-mounted inode; credential-bearing files retain private permissions.
+- Tests cover fresh/rerender chmod calls and inode preservation. Actual POSIX
+  permissions and database restart behavior still require Ubuntu validation.
+
 ## RUM help output regression check — 25 September 2026
 
 - All 46 tests passed locally with Go available.

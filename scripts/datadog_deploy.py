@@ -362,9 +362,14 @@ class Deployment:
                  "Config Agent berubah; gunakan output_dir baru dan review migrasi Agent.")
         for name, body in artifacts.items():
             path = self.out / name
+            need(not path.is_symlink(), "Menolak output symlink.")
             # Preserve inode for bind-mounted files on unchanged reruns.
             if not path.exists() or path.read_text(encoding="utf-8") != body:
                 secure_write(path, body)
+            if name == "99-datadog.cnf":
+                # No secrets: mysqld runs as a non-root user and must read this
+                # bind mount. Repair older renders without replacing their inode.
+                path.chmod(0o644)
         print("HANDOFF: review application.override.json. Tim Sucofindo memasang mount/config,"
               " lalu recreate DB/aplikasi sendiri. Lanjutkan tahap berikut setelah handoff.")
 
