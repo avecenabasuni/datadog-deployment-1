@@ -15,3 +15,5 @@ config/lab.json
 config/lab-secrets.json
 config/eminerba.json
 config/eminerba-secrets.json
+config/eminerba-rehearsal.json
+config/eminerba-rehearsal-secrets.json

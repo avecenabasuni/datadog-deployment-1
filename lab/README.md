@@ -1,5 +1,9 @@
 # Ubuntu instrumentation lab
 
+For the production layout and one-command deployment, use the newer
+[production-layout rehearsal](PRODUCTION-REHEARSAL.md). This page retains the
+original manual staged fixture; do not run both fixtures/Agents on the same VM.
+
 A standalone test stack, not a copy of Sucofindo's deployment. It contains three
 services on one Docker network: `eminerba-web` (Apache/PHP 8.1), `eminerba-api`
 (Apache/PHP 8.1 with PDO MySQL), and `eminerba-db` (MySQL 8.0). The Datadog Agent

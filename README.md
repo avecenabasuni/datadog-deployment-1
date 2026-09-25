@@ -27,7 +27,17 @@ See the [full prerequisites](docs/DEPLOYMENT.md#package-and-prerequisites).
 ## Getting started
 
 Testing without the original application images? Start with the
-[standalone Ubuntu lab](lab/README.md): two PHP 8.1 services, MySQL 8.0, and `env:lab`.
+[production-layout rehearsal](lab/PRODUCTION-REHEARSAL.md) to test the same coordinator
+with dummy PHP/MySQL applications and `env:lab`:
+
+```bash
+sudo bash scripts/eminerba-lab prepare
+# Fill lab Datadog configuration and reviewed installer hashes once.
+sudo bash scripts/eminerba-lab --maintenance
+```
+
+The original [standalone staged lab](lab/README.md) remains available for manual
+stage-by-stage testing. Use separate clean VMs for these two fixtures.
 
 Run from the package directory on the target host:
 

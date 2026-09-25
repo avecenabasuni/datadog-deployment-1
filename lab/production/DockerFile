@@ -1,0 +1,16 @@
+ARG PHP_IMAGE=php:8.1-apache-bookworm
+FROM ${PHP_IMAGE}
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates tar gzip unzip git \
+    libpng-dev libjpeg-dev libfreetype6-dev libzip-dev default-mysql-client \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j2 gd mysqli pdo pdo_mysql zip exif bcmath opcache \
+    && rm -rf /var/lib/apt/lists/*
+RUN a2enmod rewrite proxy proxy_http \
+    && mkdir -p /var/lib/php/sessions && chmod 1733 /var/lib/php/sessions
+COPY docker/php.ini /usr/local/etc/php/php.ini
+COPY docker/apache.conf /etc/apache2/sites-available/000-default.conf
+WORKDIR /var/www/html
+COPY pit_to_port/ /var/www/html/
+EXPOSE 80
+CMD ["apache2-foreground"]

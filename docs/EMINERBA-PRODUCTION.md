@@ -9,6 +9,8 @@ SSI affects the host Docker runtime, including other workloads on that host.
 
 The coordinator has offline regression tests. It has not been run against the
 production machine; exercise the same layout in staging before production use.
+The [production-layout lab](../lab/PRODUCTION-REHEARSAL.md) creates dummy applications
+and uses this same coordinator with an explicitly isolated `env:lab` profile.
 
 ## Existing stack mapping
 

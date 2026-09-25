@@ -1,5 +1,16 @@
 # Local test results
 
+## Production-layout lab — 25 September 2026
+
+77 tests ran locally: 76 passed and one POSIX symlink test was skipped on Windows.
+The lab tests cover generated layout, credential preservation, refusing existing
+workloads/production names, lab versus production profile isolation, reuse of the
+production coordinator, and preservation of an already prepared baseline. Real
+Docker Compose config parsing checked the generated fixture, named volume, and
+database credential mapping without a daemon. Bash syntax and CLI help passed.
+PHP image builds, MySQL initialization, SSI/RUM installation, and live telemetry
+for this new fixture have not been executed in this development workspace.
+
 ## Eminerba production coordinator — 25 September 2026
 
 Final local suite: 69 tests run, 68 passed, one POSIX symlink test skipped on

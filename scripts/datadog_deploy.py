@@ -481,7 +481,7 @@ class Deployment:
             except (OSError, UnicodeError) as exc:
                 raise Failure("Download installer gagal; tidak ada installer dieksekusi.") from exc
             print(name + " SHA256=" + hashlib.sha256(path.read_bytes()).hexdigest())
-        print("Review script dan download transitif. Isi hash di production.json sebelum install.")
+        print("Review script dan download transitif. Isi hash di file konfigurasi yang digunakan sebelum install.")
 
     def artifact(self, name):
         path = Path(self.c["artifact_dir"]) / (name + ".sh")

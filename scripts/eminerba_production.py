@@ -15,6 +15,22 @@ import datadog_deploy as d
 MAPPING = {"web": ("web", "eminerba_web"), "api": ("api", "eminerba_api"),
            "mysql": ("db", "eminerba_db")}
 RUM_KEYS = ("rum_application_id", "rum_client_token", "rum_remote_configuration_id", "site")
+LAB_PROJECT = "eminerba-rehearsal"
+LAB_KIND = "eminerba-production-rehearsal-v1"
+
+
+def validate_lab_fixture(compose_file):
+    compose_file = Path(compose_file).resolve()
+    marker = d.read_json(compose_file.parent / ".eminerba-lab.json", secret=True)
+    d.need(marker.get("kind") == LAB_KIND and marker.get("project") == LAB_PROJECT,
+           "Not a generated Eminerba rehearsal fixture.")
+    for name in ("docker-compose.yml", ".env"):
+        path = compose_file.parent / name
+        d.need(path.is_file() and not path.is_symlink() and
+               hashlib.sha256(path.read_bytes()).hexdigest() == marker.get("hashes", {}).get(name),
+               "Lab Compose/.env changed; refusing to run against an unrecognized stack.")
+    d.need(compose_file.name == "docker-compose.yml", "Use the generated lab Compose file.")
+    return marker
 
 
 def digest(value):
@@ -42,7 +58,7 @@ def mount_source(model, project, mount, directory):
 
 
 class Production:
-    def __init__(self, app, compose_file):
+    def __init__(self, app, compose_file, lab=False):
         self.app = app
         self.c = app.c
         self.compose_file = Path(compose_file).resolve()
@@ -52,10 +68,11 @@ class Production:
         self.stage = "initial checks"
         self.override = app.out / "production.override.json"
         self.state_path = app.out / "production-state.json"
+        self.lab = lab
 
     def step(self, name):
         self.stage = name
-        print("\n[production] " + name, flush=True)
+        print("\n[" + ("lab rehearsal" if self.lab else "production") + "] " + name, flush=True)
 
     def compose(self, *args, overlay=False):
         command = self.backend + ["--project-directory", str(self.directory), "-p", self.project,
@@ -125,7 +142,14 @@ class Production:
 
     def check(self):
         d.need(self.compose_file.is_file(), "Compose file not found.")
-        d.need(self.c["env"] == "prod", "This command requires env=prod; use the lab runbook for lab.")
+        expected_env = "lab" if self.lab else "prod"
+        d.need(self.c["env"] == expected_env, "This profile requires env=" + expected_env + ".")
+        if self.lab:
+            validate_lab_fixture(self.compose_file)
+            d.need(self.c["agent_name"] == LAB_PROJECT + "-agent" and
+                   self.c["output_dir"] == str(self.directory.parent / "generated") and
+                   self.c["artifact_dir"] == str(self.directory.parent / "artifacts"),
+                   "Lab must use its separate Agent/output/artifact paths.")
         d.need(self.c["mysql_data_dir"] == "/var/lib/mysql" and
                self.c["mysql_config_target"] == "/etc/mysql/conf.d/zz-datadog.cnf",
                "Production requires /var/lib/mysql and a separate /etc/mysql/conf.d/zz-datadog.cnf.")
@@ -138,6 +162,8 @@ class Production:
         projects = {item["project"] for item in report["selected"].values()}
         d.need(len(projects) == 1 and None not in projects and "" not in projects, "Live Compose project is required.")
         self.project = projects.pop()
+        if self.lab:
+            d.need(self.project == LAB_PROJECT, "Lab Compose project differs from the rehearsal fixture.")
         for role, (_, container) in MAPPING.items():
             sources = json.loads(self.app.docker("inspect", "--format",
                 '{{json (index .Config.Labels "com.docker.compose.project.config_files")}}', container))
@@ -305,10 +331,12 @@ class Production:
         print("Keep the production override in future Compose operations: " + str(self.override))
 
 
-def prepare(config_path, secret_path, compose_file):
+def prepare(config_path, secret_path, compose_file, lab=False):
     d.need(not any(path.exists() or path.is_symlink() for path in (config_path, secret_path)),
            "Configuration already exists; no credentials rotated.")
     d.need(Path(compose_file).is_file(), "Production Compose file not found.")
+    if lab:
+        validate_lab_fixture(compose_file)
     c = d.read_json(d.ROOT / "config/production.example.json")
     for role, (service, container) in MAPPING.items():
         c[role + "_container"] = container
@@ -317,6 +345,15 @@ def prepare(config_path, secret_path, compose_file):
              mysql_host="db", db_apps=["web", "api"], artifact_dir="/opt/eminerba-observability/artifacts",
              output_dir="/opt/eminerba-observability/generated", agent_run_dir="/opt/eminerba-observability/agent-run",
              mysql_config_target="/etc/mysql/conf.d/zz-datadog.cnf")
+    if lab:
+        namespace = Path(compose_file).resolve().parent.parent
+        c.update(env="lab", agent_name=LAB_PROJECT + "-agent", version="rehearsal-1",
+                 web_service=LAB_PROJECT + "-web", api_service=LAB_PROJECT + "-api",
+                 artifact_dir=str(namespace / "artifacts"), output_dir=str(namespace / "generated"),
+                 agent_run_dir=str(namespace / "agent-run"),
+                 rum_application_id="REPLACE_LAB_RUM_APPLICATION_ID", rum_client_token="REPLACE_LAB_RUM_CLIENT_TOKEN",
+                 rum_remote_configuration_id="REPLACE_LAB_RUM_REMOTE_CONFIGURATION_ID",
+                 rum_url="http://127.0.0.1:8081/", apm_url="http://127.0.0.1:8081/api/")
     app = d.Deployment(c)
     selected = {role: app.inspect(container) for role, (_, container) in MAPPING.items()}
     projects = {item["project"] for item in selected.values()}
@@ -341,15 +378,21 @@ def prepare(config_path, secret_path, compose_file):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("prepare", "apply"), nargs="?", default="apply")
-    parser.add_argument("--compose-file", default="/opt/eminerba_docker/docker-compose.yml")
-    parser.add_argument("--config", type=Path, default=d.ROOT / "config/eminerba.json")
-    parser.add_argument("--secrets", type=Path, default=d.ROOT / "config/eminerba-secrets.json")
+    parser.add_argument("--compose-file")
+    parser.add_argument("--config", type=Path)
+    parser.add_argument("--secrets", type=Path)
+    parser.add_argument("--lab", action="store_true", help="Generated production-layout rehearsal only, env=lab")
     parser.add_argument("--maintenance", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
+    profile = "eminerba-rehearsal" if args.lab else "eminerba"
+    args.config = args.config or d.ROOT / ("config/" + profile + ".json")
+    args.secrets = args.secrets or d.ROOT / ("config/" + profile + "-secrets.json")
+    args.compose_file = args.compose_file or ("/opt/eminerba-rehearsal/stack/docker-compose.yml" if args.lab
+                                             else "/opt/eminerba_docker/docker-compose.yml")
     coordinator = None
     try:
-        d.need(sys.platform.startswith("linux") and os.geteuid() == 0, "Run on the production Ubuntu host using sudo.")
+        d.need(sys.platform.startswith("linux") and os.geteuid() == 0, "Run on the target Ubuntu host using sudo.")
         if args.action == "apply":
             d.need(args.dry_run or args.maintenance, "Application/DB recreation requires --maintenance.")
         # Serialize runs across configurations; no competing installer processes.
@@ -361,17 +404,17 @@ def main(argv=None):
                 raise d.Failure("Another production run is active.") from exc
             if args.action == "prepare":
                 d.need(not args.dry_run, "prepare writes configuration; use apply --dry-run after setup.")
-                prepare(args.config, args.secrets, args.compose_file)
+                prepare(args.config, args.secrets, args.compose_file, lab=args.lab)
                 return 0
             c = d.read_json(args.config)
             credentials = d.read_json(args.secrets, secret=True)
-            coordinator = Production(d.Deployment(c, credentials), args.compose_file)
+            coordinator = Production(d.Deployment(c, credentials), args.compose_file, lab=args.lab)
             coordinator.run(dry=args.dry_run)
         return 0
     except (d.Failure, OSError, ValueError, KeyError, TypeError, IndexError) as exc:
         stage = coordinator.stage if coordinator else "setup"
         message = str(exc) if isinstance(exc, d.Failure) else "Invalid local configuration/data; details withheld to protect secrets."
-        print("ERROR production " + stage + ": " + message, file=sys.stderr)
+        print("ERROR " + ("lab rehearsal" if args.lab else "production") + " " + stage + ": " + message, file=sys.stderr)
         print("Stopped; no automatic rollback or volume deletion. Inspect the failed stage before rerunning.", file=sys.stderr)
         return 1
 
