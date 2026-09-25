@@ -167,8 +167,12 @@ class Deployment:
         self.dry = dry
         self.out = Path(config.get("output_dir", "generated"))
 
-    def run(self, args, **kw):
-        return self.r.run(args, **kw).stdout.strip()
+    def run(self, args, include_stderr=False, **kw):
+        result = self.r.run(args, **kw)
+        output = result.stdout
+        if include_stderr:
+            output += "\n" + result.stderr
+        return output.strip()
 
     def docker(self, *args, **kw):
         return self.run(["docker", *args], **kw)
@@ -632,7 +636,8 @@ class Deployment:
         need(re.fullmatch(r"/tmp/dd-rum\.[A-Za-z0-9]+", work), "Temporary path RUM tidak valid.")
         self.docker("cp", str(path), c["web_container"] + ":" + work + "/installer.sh")
         help_text = self.docker("exec", "-u", "0", "-w", work, c["web_container"],
-                                "sh", "./installer.sh", "--help", timeout=600)
+                                "sh", "./installer.sh", "--help", timeout=600,
+                                include_stderr=True)
         for flag in ("proxyKind", "appId", "site", "clientToken", "remoteConfigurationId", "agentUri"):
             need(flag in help_text, "Configurator RUM tidak mengiklankan flag " + flag
                  + "; hentikan, review installer sebelum konfigurasi Apache.")

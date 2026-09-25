@@ -1,5 +1,14 @@
 # Local test results
 
+## RUM help output regression check — 25 September 2026
+
+- All 46 tests passed locally with Go available.
+- RUM installer help validation now reads both stdout and stderr. Other commands
+  continue to return stdout only, and command failures remain redacted.
+- Tests cover help flags on stdout, stderr, or split across both; missing required
+  flags still stop installation and reload. Real installer behavior and RUM
+  deployment still need to be checked on the lab VM.
+
 ## Discovery template regression check — 25 September 2026
 
 - All 44 tests passed on Windows with Python 3.12 and Go available.

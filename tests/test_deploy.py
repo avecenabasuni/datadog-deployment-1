@@ -396,6 +396,44 @@ class DeploymentTests(unittest.TestCase):
                 self.app.install_rum(self.report)
             self.assertFalse(any("--proxyKind" in call.args for call in mocked.call_args_list))
 
+    def test_rum_help_accepts_flags_on_either_output_stream(self):
+        help_flags = "proxyKind appId site clientToken remoteConfigurationId agentUri"
+        for stdout, stderr in ((help_flags, ""), ("download complete", help_flags),
+                               ("proxyKind appId site", "clientToken remoteConfigurationId agentUri")):
+            with self.subTest(stdout=stdout, stderr=stderr):
+                self.app.artifact = Mock(return_value=Path("/reviewed/rum.sh"))
+                self.app.export_rum = Mock()
+                real_docker = self.app.docker
+                def docker(*args, **kw):
+                    if "mktemp" in args:
+                        return "/tmp/dd-rum.12345678"
+                    if "--help" in args:
+                        return real_docker(*args, **kw)
+                    return ""
+                with patch.object(self.runner, "run", return_value=subprocess.CompletedProcess(
+                        [], 0, stdout, stderr)), patch.object(self.app, "docker", side_effect=docker) as mocked:
+                    self.app.install_rum(self.report)
+                self.assertTrue(any("--proxyKind" in call.args for call in mocked.call_args_list))
+                self.assertTrue(any("graceful" in call.args for call in mocked.call_args_list))
+                self.app.export_rum.assert_called_once_with(self.report)
+
+    def test_rum_help_missing_flags_on_both_streams_prevents_install(self):
+        self.app.artifact = Mock(return_value=Path("/reviewed/rum.sh"))
+        real_docker = self.app.docker
+        def docker(*args, **kw):
+            if "mktemp" in args:
+                return "/tmp/dd-rum.12345678"
+            if "--help" in args:
+                return real_docker(*args, **kw)
+            return ""
+        with patch.object(self.runner, "run", return_value=subprocess.CompletedProcess(
+                [], 0, "download complete", "appId site")), \
+                patch.object(self.app, "docker", side_effect=docker) as mocked:
+            with self.assertRaisesRegex(d.Failure, "proxyKind"):
+                self.app.install_rum(self.report)
+        self.assertFalse(any("--proxyKind" in call.args or "graceful" in call.args
+                             for call in mocked.call_args_list))
+
     def test_agent_managed_rerun_health_only(self):
         self.app.render(self.report)
         body = (self.app.out / "mysql.d/conf.yaml").read_text(encoding="utf-8")
