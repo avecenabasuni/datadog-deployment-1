@@ -121,6 +121,25 @@ dengan service `eminerba-rehearsal-web` dan `eminerba-rehearsal-api`.
 Ulangi command hanya sebagai tindakan maintenance: container dapat direcreate
 lagi. Kegagalan menghentikan urutan; tidak ada rollback atau penghapusan data otomatis.
 
+### Memperbaiki schema auxiliary yang belum terbentuk
+
+Jika pemeriksaan melaporkan `Schema aplikasi tidak ditemukan: eminerba_lab_aux`,
+jalankan dari repository:
+
+```bash
+git pull origin main
+sudo bash scripts/eminerba-lab repair --maintenance
+sudo bash scripts/eminerba-lab --dry-run
+sudo bash scripts/eminerba-lab --maintenance
+```
+
+Repair memvalidasi fixture, project, dan volume khusus lab sebelum membuat schema
+auxiliary, menyalin baris contoh yang belum ada, dan memberikan akses SELECT untuk
+akun aplikasi dummy. Data existing, password, dan volume dipertahankan. Preview
+repair tersedia dengan `repair --dry-run`. Command ini tidak berlaku untuk
+production. Setup lab baru juga memastikan kedua schema tersedia sebelum selesai.
+Pemeriksaan schema deployment dilakukan sebelum perubahan container.
+
 ## 4. Uji dari browser
 
 Di laptop, buat SSH tunnel dan biarkan berjalan:

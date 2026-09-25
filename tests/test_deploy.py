@@ -125,6 +125,13 @@ class DeploymentTests(unittest.TestCase):
                 self.app.verify_mysql_startup()
             self.assertNotIn("unexpected-secret-output", str(error.exception))
 
+    def test_schema_check_identifies_missing_database_without_creating_it(self):
+        self.app.c["mysql_schemas"] = ["eminerba_lab", "eminerba_lab_aux"]
+        with patch.object(self.app, "mysql", side_effect=["1", "0"]) as mysql:
+            with self.assertRaisesRegex(d.Failure, "Schema aplikasi tidak ditemukan: eminerba_lab_aux"):
+                self.app.check_mysql_schemas()
+        self.assertTrue(all(call.args[0].startswith("SELECT COUNT(*)") for call in mysql.call_args_list))
+
     def test_sql_encoding_round_trip(self):
         for value in ("a'b", "\\'; DROP USER root; --", "$HOME # : %", "é日本<>", 'a"b'):
             encoded = d.literal(value)

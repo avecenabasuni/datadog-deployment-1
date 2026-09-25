@@ -540,6 +540,11 @@ class Deployment:
             ROOT / "datadog/templates/consumers.sql").read_text().strip()
         return result
 
+    def check_mysql_schemas(self):
+        for schema in self.c["mysql_schemas"]:
+            need(self.mysql("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name="
+                            + literal(schema) + ";") == "1", "Schema aplikasi tidak ditemukan: " + schema)
+
     def dbm_sql(self, report, export=False):
         c = self.c
         account = literal(c["db_user"]) + "@" + literal(c["db_user_host"])
@@ -571,9 +576,7 @@ class Deployment:
         need(mysql_version(actual)[:2] == report["mysql_version"][:2], "Versi server berubah.")
         datadir = self.mysql("SELECT @@datadir;").rstrip("/")
         need(datadir == c["mysql_data_dir"].rstrip("/"), "Datadir server berbeda dari mapping.")
-        for schema in c["mysql_schemas"]:
-            need(self.mysql("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name="
-                            + literal(schema) + ";") == "1", "Schema aplikasi tidak ditemukan.")
+        self.check_mysql_schemas()
         exists = self.mysql("SELECT COUNT(*) FROM mysql.user WHERE user=" + literal(c["db_user"])
                             + " AND host=" + literal(c["db_user_host"]) + ";") == "1"
         if exists:

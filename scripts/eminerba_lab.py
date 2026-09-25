@@ -91,6 +91,49 @@ def fill_generated_admin_password(stack, secret_path):
         d.secure_write(secret_path, d.jdump(credentials))
 
 
+def repair(stack=STACK, config_path=CONFIG, secret_path=SECRETS, dry=False):
+    """Repair only the auxiliary dummy schema on a verified rehearsal database."""
+    p.validate_lab_fixture(stack / "docker-compose.yml")
+    c = d.read_json(config_path)
+    d.need(c.get("env") == "lab" and c.get("mysql_container") == "eminerba_db" and
+           c.get("mysql_port") == 3306 and c.get("admin_user") == "root" and
+           set(c.get("mysql_schemas", [])) == {"eminerba_lab", "eminerba_lab_aux"},
+           "Repair supports only the generated dummy lab, not production/custom schemas.")
+    app = d.Deployment(c, d.read_json(secret_path, secret=True))
+    endpoint = app.docker("context", "inspect", "--format", "{{.Endpoints.docker.Host}}")
+    d.need(os.environ.get("DOCKER_HOST", endpoint) == "unix:///var/run/docker.sock", "Repair requires the local lab Docker socket.")
+    security = json.loads(app.docker("info", "--format", "{{json .SecurityOptions}}")) or []
+    d.need(not any("rootless" in value for value in security), "Repair requires rootful Docker.")
+    item = app.inspect("eminerba_db")
+    d.need(item["project"] == p.LAB_PROJECT and item["service"] == "db" and item["running"],
+           "Database is not the running rehearsal service; refusing repair.")
+    sources = json.loads(app.docker("inspect", "--format",
+        '{{json (index .Config.Labels "com.docker.compose.project.config_files")}}', "eminerba_db"))
+    files = {str(Path(value).resolve()) for value in (sources or "").split(",")}
+    base = str((stack / "docker-compose.yml").resolve())
+    d.need(base in files and files <= {base, str((stack.parent / "generated/production.override.json").resolve())},
+           "Database Compose source differs from the generated fixture.")
+    d.need(any(m["Destination"] == "/var/lib/mysql" and m["Type"] == "volume" and
+               m.get("Name") == p.LAB_PROJECT + "_mysql_data" and m.get("RW") for m in item["mounts"]),
+           "Database does not use the rehearsal data volume; refusing repair.")
+    d.need(app.mysql("SELECT @@datadir;").rstrip("/") == "/var/lib/mysql", "Unexpected repair datadir.")
+    d.need(app.mysql("SELECT COUNT(*) FROM eminerba_lab.samples;") == "3",
+           "Primary dummy samples differ; inspect fixture data before repair.")
+    if dry:
+        print("PLAN: ensure eminerba_lab_aux.samples, copy missing dummy rows, and grant lab SELECT access. No SQL changes.")
+        return
+    app.mysql("CREATE DATABASE IF NOT EXISTS eminerba_lab_aux;\n"
+              "CREATE TABLE IF NOT EXISTS eminerba_lab_aux.samples LIKE eminerba_lab.samples;\n"
+              "INSERT INTO eminerba_lab_aux.samples (id,name,status) "
+              "SELECT s.id,s.name,s.status FROM eminerba_lab.samples s "
+              "LEFT JOIN eminerba_lab_aux.samples a ON a.id=s.id WHERE a.id IS NULL;\n"
+              "GRANT SELECT ON eminerba_lab_aux.* TO 'eminerba_lab'@'%';\n")
+    app.check_mysql_schemas()
+    d.need(app.mysql("SELECT COUNT(*) FROM eminerba_lab_aux.samples WHERE id IN (1,2,3);") == "3",
+           "Auxiliary dummy rows still incomplete; inspect fixture before retrying.")
+    print("Lab auxiliary schema ready. Existing rows/passwords/volumes were preserved.")
+
+
 def prepare(stack=STACK, config_path=CONFIG, secret_path=SECRETS, runner=None):
     runner = runner or d.Runner(60)
     def run(args, **kwargs):
@@ -142,12 +185,13 @@ def prepare(stack=STACK, config_path=CONFIG, secret_path=SECRETS, runner=None):
     p.prepare(config_path, secret_path, stack / "docker-compose.yml", lab=True)
     # The generated DB root password is known locally; never ask the user to copy it.
     fill_generated_admin_password(stack, secret_path)
+    repair(stack, config_path, secret_path)
     print("Baseline ready at http://127.0.0.1:8081/. Fill lab Datadog values and reviewed installer hashes once.")
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", nargs="?", choices=("prepare", "apply"), default="apply")
+    parser.add_argument("action", nargs="?", choices=("prepare", "apply", "repair"), default="apply")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--maintenance", action="store_true")
     args = parser.parse_args(argv)
@@ -160,18 +204,24 @@ def main(argv=None):
         return p.main(command)
     try:
         d.need(sys.platform.startswith("linux") and os.geteuid() == 0, "Run on a dedicated Ubuntu VM with sudo.")
-        d.need(not args.dry_run, "prepare builds the dummy lab; --dry-run applies to the deployment step.")
+        if args.action == "repair":
+            d.need(args.dry_run or args.maintenance, "Lab SQL repair requires --maintenance.")
+        else:
+            d.need(not args.dry_run, "prepare builds the dummy lab; --dry-run applies to deployment or repair.")
         import fcntl
         with open("/run/lock/eminerba-observability.lock", "w") as lock:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as exc:
                 raise d.Failure("Another deployment is active.") from exc
-            prepare()
+            if args.action == "repair":
+                repair(dry=args.dry_run)
+            else:
+                prepare()
         return 0
     except (d.Failure, OSError, ValueError, KeyError, TypeError) as exc:
         message = str(exc) if isinstance(exc, d.Failure) else "Invalid lab data; details withheld to protect secrets."
-        print("ERROR lab prepare: " + message, file=sys.stderr)
+        print("ERROR lab " + args.action + ": " + message, file=sys.stderr)
         return 1
 
 

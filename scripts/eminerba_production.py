@@ -191,6 +191,7 @@ class Production:
         self.check_environment(model)
         datadir = self.app.mysql("SELECT @@datadir;").rstrip("/")
         d.need(datadir == self.c["mysql_data_dir"].rstrip("/"), "Actual MySQL datadir differs; refusing recreation.")
+        self.app.check_mysql_schemas()
         self.base_digest = digest(model)
         self.base_version = model.get("version")
         if self.state:

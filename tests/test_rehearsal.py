@@ -102,8 +102,9 @@ class RehearsalTests(unittest.TestCase):
             self.assertTrue(lab)
             d.secure_write(config_path, d.jdump({"env": "lab"}))
             d.secure_write(secret_path, d.jdump({"admin_password": "", "db_password": "keep-dbm-password"}))
-        with patch.object(p, "prepare", side_effect=prepare) as coordinator:
+        with patch.object(p, "prepare", side_effect=prepare) as coordinator, patch.object(lab, "repair") as repair:
             lab.prepare(self.stack, self.config, self.secrets, runner)
+        repair.assert_called_once_with(self.stack, self.config, self.secrets)
         coordinator.assert_called_once_with(self.config, self.secrets, self.stack / "docker-compose.yml", lab=True)
         env = dict(line.split("=", 1) for line in (self.stack / ".env").read_text().splitlines())
         credentials = d.read_json(self.secrets)
@@ -122,6 +123,60 @@ class RehearsalTests(unittest.TestCase):
         with patch.object(p, "main", return_value=0) as main:
             lab.main(["--dry-run"])
         main.assert_called_once_with(["apply", "--lab", "--dry-run"])
+
+    def repair_app(self):
+        lab.create_fixture(self.stack)
+        d.secure_write(self.config, d.jdump({"env": "lab", "mysql_container": "eminerba_db",
+            "mysql_port": 3306, "admin_user": "root", "mysql_schemas": ["eminerba_lab", "eminerba_lab_aux"]}))
+        d.secure_write(self.secrets, d.jdump({"admin_password": "fixture-password"}))
+        app = Mock()
+        def docker(*args):
+            if args[:2] == ("context", "inspect"):
+                return "unix:///var/run/docker.sock"
+            if args[0] == "info":
+                return "[]"
+            return json.dumps(str(self.stack / "docker-compose.yml"))
+        app.docker.side_effect = docker
+        app.inspect.return_value = {"project": p.LAB_PROJECT, "service": "db", "running": True,
+            "mounts": [{"Destination": "/var/lib/mysql", "Type": "volume", "Name": p.LAB_PROJECT + "_mysql_data", "RW": True}]}
+        app.mysql.side_effect = lambda sql: "/var/lib/mysql/" if "@@datadir" in sql else "3"
+        return app
+
+    def test_repair_only_adds_auxiliary_fixture_data(self):
+        app = self.repair_app()
+        with patch.object(d, "Deployment", return_value=app):
+            lab.repair(self.stack, self.config, self.secrets)
+        changes = [call.args[0] for call in app.mysql.call_args_list if not call.args[0].startswith("SELECT")]
+        self.assertEqual(len(changes), 1)
+        self.assertIn("CREATE DATABASE IF NOT EXISTS eminerba_lab_aux", changes[0])
+        self.assertIn("WHERE a.id IS NULL", changes[0])
+        for forbidden in ("DROP", "DELETE", "TRUNCATE", "UPDATE", "ALTER USER"):
+            self.assertNotIn(forbidden, changes[0])
+        app.check_mysql_schemas.assert_called_once()
+
+    def test_repair_dry_run_has_no_sql_changes(self):
+        app = self.repair_app()
+        with patch.object(d, "Deployment", return_value=app):
+            lab.repair(self.stack, self.config, self.secrets, dry=True)
+        self.assertTrue(all(call.args[0].startswith("SELECT") for call in app.mysql.call_args_list))
+
+    def test_repair_refuses_wrong_volume_before_sql(self):
+        app = self.repair_app()
+        app.inspect.return_value["mounts"][0]["Name"] = "production_mysql_data"
+        with patch.object(d, "Deployment", return_value=app):
+            with self.assertRaisesRegex(d.Failure, "rehearsal data volume"):
+                lab.repair(self.stack, self.config, self.secrets)
+        app.mysql.assert_not_called()
+
+    def test_repair_refuses_production_profile(self):
+        app = self.repair_app()
+        c = d.read_json(self.config)
+        c["env"] = "prod"
+        d.secure_write(self.config, d.jdump(c))
+        with patch.object(d, "Deployment", return_value=app):
+            with self.assertRaisesRegex(d.Failure, "only the generated dummy lab"):
+                lab.repair(self.stack, self.config, self.secrets)
+        app.mysql.assert_not_called()
 
     def test_generated_profile_uses_lab_tags_and_separate_artifact_paths(self):
         lab.create_fixture(self.stack)

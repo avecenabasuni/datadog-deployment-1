@@ -1,5 +1,13 @@
 # Local test results
 
+## Lab auxiliary schema repair — 25 September 2026
+
+83 tests ran locally: 82 passed and one POSIX symlink test was skipped on Windows.
+Tests cover schema checks before deployment mutation, missing-schema diagnostics,
+lab-only repair guards, read-only repair preview, and insertion of missing sample
+rows without replacing existing data. SQL execution is mocked; repair still needs
+validation on the lab VM. Go template and real Docker Compose parser tests ran.
+
 ## Production-layout lab — 25 September 2026
 
 77 tests ran locally: 76 passed and one POSIX symlink test was skipped on Windows.

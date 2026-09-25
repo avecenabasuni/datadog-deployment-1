@@ -146,7 +146,7 @@ class ProductionTests(unittest.TestCase):
             return "core_module (static)"
         with patch.object(self.app, "preflight", return_value=self.report), \
                 patch.object(self.app, "artifact"), patch.object(self.app, "docker", side_effect=docker), \
-                patch.object(self.app, "mysql", return_value="/var/lib/mysql/"), \
+                patch.object(self.app, "mysql", side_effect=lambda sql: "1" if "information_schema.schemata" in sql else "/var/lib/mysql/"), \
                 patch.object(self.flow, "model", return_value=self.model):
             return self.flow.check()
 
@@ -161,6 +161,12 @@ class ProductionTests(unittest.TestCase):
         with self.assertRaisesRegex(d.Failure, "Existing other Agent"):
             self.check_with_mocks()
         self.assertEqual(self.app.r.calls, [])
+
+    def test_missing_schema_is_checked_before_deployment_mutation(self):
+        with patch.object(self.app, "check_mysql_schemas", side_effect=d.Failure("missing auxiliary schema")):
+            with self.assertRaisesRegex(d.Failure, "missing auxiliary schema"):
+                self.check_with_mocks()
+        self.assertEqual([args for args, _ in self.app.r.calls], [["docker", "compose", "version"]])
 
     def test_environment_drift_blocks_without_exposing_values(self):
         self.model["services"]["web"]["environment"] = {"DB_PASS": "fixture-secret"}
@@ -237,7 +243,7 @@ class ProductionTests(unittest.TestCase):
             return json.dumps(str(self.compose_file)) if "inspect" in args else "datadog_module (shared)"
         with patch.object(self.app, "preflight", return_value=self.report), \
                 patch.object(self.app, "artifact"), patch.object(self.app, "docker", side_effect=docker), \
-                patch.object(self.app, "mysql", return_value="/var/lib/mysql/"), \
+                patch.object(self.app, "mysql", side_effect=lambda sql: "1" if "information_schema.schemata" in sql else "/var/lib/mysql/"), \
                 patch.object(self.flow, "model", return_value=self.model):
             with self.assertRaisesRegex(d.Failure, "Existing RUM"):
                 self.flow.check()
