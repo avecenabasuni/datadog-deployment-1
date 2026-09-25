@@ -220,7 +220,7 @@ class Deployment:
             "ssi_packages": packages,
         }
 
-    def preflight(self, full=False):
+    def preflight(self, full=False, require_rum_tools=True):
         validate(self.c, full)
         c = self.c
         need(platform.system() == "Linux", "Jalankan preflight pada host Ubuntu target.")
@@ -288,8 +288,9 @@ class Deployment:
         need(apache_config.startswith(apache_root + "/") and ".." not in apache_config.split("/"),
              "Apache config di luar root backup; review layout diperlukan.")
         self.docker("exec", c["web_container"], apache, "-t")
-        for tool in ("curl", "tar", "gzip", "gpg", "sh"):
-            self.docker("exec", c["web_container"], "sh", "-c", 'command -v "$1"', "sh", tool)
+        if require_rum_tools:
+            for tool in ("curl", "tar", "gzip", "gpg", "sh"):
+                self.docker("exec", c["web_container"], "sh", "-c", 'command -v "$1"', "sh", tool)
         for role in ("web", "api"):
             self.docker("exec", c[role + "_container"], "php", "-r",
                         '$s=@fsockopen($argv[1],(int)$argv[2],$e,$m,5); exit($s?0:1);',
@@ -660,7 +661,7 @@ class Deployment:
         except Failure as exc:
             raise Failure("Config test gagal; tidak reload. Restore Apache dari " + str(backup)) from exc
         self.docker("exec", c["web_container"], report["apache"], "-k", "graceful")
-        self.export_rum(report)
+        return self.export_rum(report)
 
     def export_rum(self, report):
         if self.dry:
@@ -689,6 +690,20 @@ class Deployment:
                 str(target / "apache") + ":" + report["apache_root"] + ":ro"]}}}))
         print("HANDOFF RUM persistence: " + str(target)
               + ". Review diff/config/assets lalu masukkan ke image web tim; uji setelah recreate.")
+        return target
+
+    def verify_mysql_startup(self, admin=False):
+        names = ("performance_schema", "max_digest_length", "performance_schema_max_digest_length",
+                 "performance_schema_max_sql_text_length")
+        result = self.mysql("SELECT " + ",".join("@@" + name for name in names) + ";", admin=admin)
+        values = result.split("\t")
+        need(len(values) == 4 and all(re.fullmatch(r"[0-9]+", value) for value in values),
+             "Tidak dapat membaca startup settings MySQL.")
+        expected = ["1", "4096", "4096", "4096"]
+        mismatch = [name + "=" + actual + " (expected " + wanted + ")"
+                    for name, actual, wanted in zip(names, values, expected) if actual != wanted]
+        need(not mismatch, "Startup settings MySQL belum sesuai: " + ", ".join(mismatch)
+             + ". Periksa mount/permission .cnf dan restart database.")
 
     def verify(self, report):
         if self.dry:
@@ -710,10 +725,7 @@ class Deployment:
                 # Exit code only: don't expose container environment.
                 self.docker("exec", c[role + "_container"], "php", "-r",
                             'exit(getenv($argv[1])===$argv[2]?0:1);', key, val)
-        result = self.mysql("SELECT @@performance_schema,@@max_digest_length,"
-                            "@@performance_schema_max_digest_length,@@performance_schema_max_sql_text_length;",
-                            admin=False)
-        need(result.split("\t") == ["1", "4096", "4096", "4096"], "Startup settings MySQL belum sesuai.")
+        self.verify_mysql_startup()
         consumers = self.mysql("SELECT COUNT(*) FROM performance_schema.setup_consumers "
                                "WHERE name IN ('events_statements_current','events_waits_current',"
                                "'events_statements_history_long') AND enabled='YES';", admin=False)

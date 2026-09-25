@@ -114,6 +114,17 @@ class DeploymentTests(unittest.TestCase):
             with self.assertRaises(d.Failure):
                 d.mysql_version(text)
 
+    def test_mysql_startup_reports_actual_numeric_mismatch(self):
+        with patch.object(self.app, "mysql", return_value="1\t1024\t1024\t1024"):
+            with self.assertRaisesRegex(d.Failure, r"max_digest_length=1024 \(expected 4096\)"):
+                self.app.verify_mysql_startup()
+        with patch.object(self.app, "mysql", return_value="1\t4096\t4096\t4096"):
+            self.app.verify_mysql_startup()
+        with patch.object(self.app, "mysql", return_value="unexpected-secret-output"):
+            with self.assertRaises(d.Failure) as error:
+                self.app.verify_mysql_startup()
+            self.assertNotIn("unexpected-secret-output", str(error.exception))
+
     def test_sql_encoding_round_trip(self):
         for value in ("a'b", "\\'; DROP USER root; --", "$HOME # : %", "é日本<>", 'a"b'):
             encoded = d.literal(value)

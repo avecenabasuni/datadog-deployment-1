@@ -3,6 +3,10 @@
 [Back to README](../README.md). Run every command below from the package root,
 not from the `docs` directory.
 
+This page describes the staged `datadog-bootstrap` workflow. The separate
+[Eminerba production coordinator](EMINERBA-PRODUCTION.md) explicitly automates
+container recreation for the supplied `/opt/eminerba_docker` stack.
+
 This package stages maintenance changes for Ubuntu, Docker, Apache/PHP 8.1,
 CodeIgniter, and MySQL. Work on the host through SSH with the Sucofindo team.
 The main Compose file is not required in this workspace. The script does not edit
@@ -121,7 +125,8 @@ branches. The package does not upgrade MySQL. Review Performance Schema memory l
 and database backups before maintenance. Persistent mounts must cover
 `mysql_data_dir`; the DBA confirms `@@datadir`, including custom paths.
 
-Outputs in `output_dir` use file mode 0600 and directory mode 0700:
+Outputs in `output_dir` use file mode 0600 and directory mode 0700, except the
+non-secret MySQL startup `.cnf`, which is 0644 for the MySQL container user:
 
 - `application.override.json`: JSON accepted as YAML/Compose, using discovered service
   labels, environment variables, socket mounts, and MySQL mounts; no passwords/API key.

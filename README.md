@@ -3,9 +3,17 @@
 Staged automation for production Ubuntu and Docker: Infrastructure Monitoring,
 container logs, host-based SSI for APM, MySQL DBM, and Apache RUM auto-injection.
 
-The package prepares configuration and handoffs. It does not edit the main Compose
-file; the Sucofindo team remains responsible for application and database restarts
-or container recreation.
+The staged `datadog-bootstrap` command prepares configuration and handoffs without
+editing the main Compose file or recreating applications. For the supplied
+`/opt/eminerba_docker` stack, the opt-in [production coordinator](docs/EMINERBA-PRODUCTION.md)
+performs the full lifecycle with one command after initial configuration:
+
+```bash
+sudo bash scripts/eminerba-production --maintenance
+```
+
+This command recreates web/API/database containers during maintenance and preserves
+their existing mounts. Read its setup and validation requirements before use.
 
 ## Prerequisites
 
@@ -70,6 +78,7 @@ or legacy `docker-compose`. The lab's `dc` helper uses this wrapper.
 ## Documentation
 
 - [Deployment runbook, technical details, and official references](docs/DEPLOYMENT.md)
+- [Eminerba production coordinator and one-time setup](docs/EMINERBA-PRODUCTION.md)
 - [Validation and sign-off checklist](docs/VALIDATION.md)
 - [Component-level rollback](docs/ROLLBACK.md)
 - [Local test results and limitations](docs/LOCAL-TESTS.md)

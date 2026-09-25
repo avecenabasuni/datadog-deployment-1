@@ -13,3 +13,5 @@ lab/.env
 lab/generated/
 config/lab.json
 config/lab-secrets.json
+config/eminerba.json
+config/eminerba-secrets.json

@@ -1,5 +1,20 @@
 # Local test results
 
+## Eminerba production coordinator — 25 September 2026
+
+Final local suite: 69 tests run, 68 passed, one POSIX symlink test skipped on
+Windows. Go template tests and the real Docker Compose 5.0.2 configuration parser
+test both ran. Bash syntax and CLI help checks passed.
+
+The new coordinator is covered by offline tests for the supplied web/api/db
+mapping, live project and mounts, preserved MySQL volumes, mid-run Compose drift,
+maintenance gating, Agent ownership, pinned images, missing-tool image builds,
+RUM persistence on reruns, bounded DB readiness, and failure before mutation.
+An optional integration test uses the installed Docker Compose parser against
+temporary fixtures to verify actual override merging without a Docker daemon.
+The supplied production Compose/Dockerfile were used as input context, not copied
+over the production files. No production connection/deployment has been performed.
+
 ## MySQL startup configuration permissions — 25 September 2026
 
 - Windows suite: 48 tests run, 47 passed, one POSIX symlink test skipped.
