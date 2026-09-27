@@ -124,6 +124,31 @@ class RehearsalTests(unittest.TestCase):
             lab.main(["--dry-run"])
         main.assert_called_once_with(["apply", "--lab", "--dry-run"])
 
+    def test_leftover_config_without_stack_cannot_generate_new_passwords(self):
+        d.secure_write(self.config, d.jdump({"env": "lab"}))
+        d.secure_write(self.secrets, d.jdump({"admin_password": "old-password"}))
+        runner = LabRunner()
+        with self.assertRaisesRegex(d.Failure, "generated stack is missing"):
+            lab.prepare(self.stack, self.config, self.secrets, runner)
+        self.assertFalse(self.stack.exists())
+        self.assertFalse(any(args[0] == "bash" for args, _ in runner.calls))
+
+    def test_leftover_config_with_missing_containers_does_not_report_success(self):
+        lab.create_fixture(self.stack)
+        d.secure_write(self.config, d.jdump({"env": "lab"}))
+        d.secure_write(self.secrets, d.jdump({"admin_password": "", "db_password": "keep-password"}))
+        before = self.secrets.read_bytes()
+        for saved in (False, True):
+            if saved:
+                d.secure_write(self.stack.parent / "generated/recovery.json", "{}")
+            runner = LabRunner(names="eminerba_db")
+            with self.assertRaisesRegex(d.Failure, "baseline containers are missing") as caught:
+                lab.prepare(self.stack, self.config, self.secrets, runner)
+            if saved:
+                self.assertIn("rollback --dry-run", caught.exception.hint)
+            self.assertEqual(self.secrets.read_bytes(), before)
+            self.assertFalse(any(args[0] == "bash" for args, _ in runner.calls))
+
     def repair_app(self):
         lab.create_fixture(self.stack)
         d.secure_write(self.config, d.jdump({"env": "lab", "mysql_container": "eminerba_db",

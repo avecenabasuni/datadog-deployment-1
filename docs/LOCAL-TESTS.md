@@ -1,5 +1,15 @@
 # Local test results
 
+## Partial lab cleanup regression — 27 September 2026
+
+- Windows / Python 3.12: 129 tests, 122 passed, 7 POSIX-specific skips.
+- Ubuntu under WSL / Python 3.12: 129 tests, 128 passed, one Go-toolchain skip.
+- Added checks for leftover configuration after container cleanup, missing stack
+  files before password generation, and actionable Docker `no such object` hints.
+- Preparation now refuses to report a ready baseline when required containers
+  are absent. Existing recovery metadata directs the operator to rollback preview;
+  no containers, volumes or credentials are automatically replaced by this check.
+
 ## Lifecycle and diagnostics audit — 27 September 2026
 
 - Windows / Python 3.12: 126 tests, 119 passed, 7 POSIX-specific skips.

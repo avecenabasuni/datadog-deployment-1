@@ -15,6 +15,12 @@ import cli_output as cli
 
 
 class CliOutputTests(unittest.TestCase):
+    def test_missing_docker_object_suggests_lab_preparation(self):
+        error = cli.command_error(["docker", "inspect", "eminerba_web"],
+                                  subprocess.CompletedProcess([], 1, "", "error: no such object: eminerba_web"))
+        self.assertIn("docker ps -a", error.hint)
+        self.assertIn("eminerba-lab prepare", error.hint)
+
     def test_known_encoded_and_terminal_colored_secrets_are_redacted(self):
         secret = "test-password' with spaces"
         redactor = cli.Redactor([secret, "abcdef12345"])

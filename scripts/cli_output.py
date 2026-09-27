@@ -119,6 +119,8 @@ def next_step(text, command=""):
         return "Check the MySQL username, password and grants in the local secrets/configuration files."
     if "unknown database" in value or "schema" in value:
         return "Compare mysql_schemas with the databases on the target server; do not create production schemas blindly."
+    if "no such object" in value:
+        return "Run sudo docker ps -a and verify the configured container names. For a fresh rehearsal lab, run sudo bash scripts/eminerba-lab prepare first."
     if "no such container" in value or "not running" in value:
         return "Run sudo docker ps -a and check the target container's status and configured name."
     if "address already in use" in value or "port is already allocated" in value:

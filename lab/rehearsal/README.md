@@ -67,6 +67,14 @@ generator: marker menolak perubahan agar fixture tidak berubah menjadi target
 lain tanpa sengaja. `prepare` ulang mempertahankan file/password dan tidak
 membuat ulang baseline setelah konfigurasi observability tersedia.
 
+Jika cleanup menghapus container tetapi menyisakan konfigurasi, `prepare` akan
+berhenti dengan daftar container yang hilang. Pesan konfigurasi existing bukan
+bukti bahwa baseline masih berjalan. Jika `generated/recovery.json` masih ada,
+periksa `sudo bash scripts/eminerba-lab rollback --dry-run` terlebih dahulu;
+rollback membutuhkan image, volume, dan stack asli. Jika stack juga sudah hilang,
+pulihkan file yang cocok atau arsipkan konfigurasi lab lama sebelum memulai lab
+baru. Jangan mencampur password lama dengan database baru.
+
 ## 2. Isi konfigurasi Datadog sekali
 
 ```bash

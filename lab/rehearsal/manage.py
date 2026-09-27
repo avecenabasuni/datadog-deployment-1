@@ -161,10 +161,25 @@ def prepare(stack=STACK, config_path=CONFIG, secret_path=SECRETS, runner=None):
         project = json.loads(run(["docker", "inspect", "--format",
                                   '{{json (index .Config.Labels "com.docker.compose.project")}}', container]))
         d.need(project == p.LAB_PROJECT, "Container name belongs to another project: " + container)
-    create_fixture(stack)
-    if config_path.exists() or secret_path.exists():
+    existing_config = config_path.exists() or secret_path.exists()
+    if existing_config:
         d.need(config_path.is_file() and secret_path.is_file(), "Partial lab configuration; preserve files and inspect locally.")
         d.need(d.read_json(config_path).get("env") == "lab", "Existing configuration is not a lab profile.")
+        d.need((stack / ".eminerba-lab.json").is_file(),
+               "Lab configuration remains but its generated stack is missing. Restore the matching stack/credentials "
+               "or archive the old lab configuration before preparing a fresh disposable lab.")
+    create_fixture(stack)
+    if existing_config:
+        expected = {container for _, container in p.MAPPING.values()}
+        missing = sorted(expected - names)
+        if missing:
+            recovery = stack.parent / "generated/recovery.json"
+            raise d.Failure("Lab configuration exists, but baseline containers are missing: " + ", ".join(missing),
+                            hint=("A recovery baseline exists. Run sudo bash scripts/eminerba-lab rollback --dry-run; "
+                                  "if it passes, use rollback --maintenance before applying again."
+                                  if recovery.is_file() else
+                                  "Restore the matching lab stack and data, or archive the old lab configuration "
+                                  "and use a clean snapshot for a fresh prepare. Do not mix old credentials with a new database."))
         fill_generated_admin_password(stack, secret_path)
         d.log("Lab configuration already exists. Use eminerba-lab --dry-run or --maintenance; baseline was not recreated.")
         return
