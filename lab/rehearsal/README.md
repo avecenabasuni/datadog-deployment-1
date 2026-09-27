@@ -123,7 +123,7 @@ lagi. Kegagalan menghentikan urutan; tidak ada rollback atau penghapusan data ot
 
 ### Memperbaiki schema auxiliary yang belum terbentuk
 
-Jika pemeriksaan melaporkan `Schema aplikasi tidak ditemukan: eminerba_lab_aux`,
+Jika pemeriksaan melaporkan `Application schema not found: eminerba_lab_aux`,
 jalankan dari repository:
 
 ```bash

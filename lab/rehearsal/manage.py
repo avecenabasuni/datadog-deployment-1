@@ -52,7 +52,7 @@ def create_fixture(stack):
         d.need((stack / ".eminerba-lab.json").is_file(),
                "Nonempty destination is not a generated lab; refusing to overwrite.")
         p.validate_lab_fixture(stack / "docker-compose.yml")
-        print("Existing fixture preserved; no password rotation.")
+        d.log("Existing fixture preserved; no password rotation.")
         return
     stack.mkdir(parents=True, exist_ok=True, mode=0o755)
     root_password, app_password = secrets.token_hex(24), secrets.token_hex(24)
@@ -82,7 +82,7 @@ def create_fixture(stack):
               "hashes": {name: hashlib.sha256((stack / name).read_bytes()).hexdigest()
                          for name in ("docker-compose.yml", ".env")}}
     d.secure_write(stack / ".eminerba-lab.json", d.jdump(marker))
-    print("Created dummy production-layout fixture: " + str(stack))
+    d.log("Created dummy production-layout fixture: " + str(stack))
 
 
 def fill_generated_admin_password(stack, secret_path):
@@ -123,7 +123,7 @@ def repair(stack=STACK, config_path=CONFIG, secret_path=SECRETS, dry=False):
     d.need(app.mysql("SELECT COUNT(*) FROM eminerba_lab.samples;") == "3",
            "Primary dummy samples differ; inspect fixture data before repair.")
     if dry:
-        print("PLAN: ensure eminerba_lab_aux.samples, copy missing dummy rows, and grant lab SELECT access. No SQL changes.")
+        d.log("PLAN: ensure eminerba_lab_aux.samples, copy missing dummy rows, and grant lab SELECT access. No SQL changes.")
         return
     app.mysql("CREATE DATABASE IF NOT EXISTS eminerba_lab_aux;\n"
               "CREATE TABLE IF NOT EXISTS eminerba_lab_aux.samples LIKE eminerba_lab.samples;\n"
@@ -134,7 +134,7 @@ def repair(stack=STACK, config_path=CONFIG, secret_path=SECRETS, dry=False):
     app.check_mysql_schemas()
     d.need(app.mysql("SELECT COUNT(*) FROM eminerba_lab_aux.samples WHERE id IN (1,2,3);") == "3",
            "Auxiliary dummy rows still incomplete; inspect fixture before retrying.")
-    print("Lab auxiliary schema ready. Existing rows/passwords/volumes were preserved.")
+    d.log("Lab auxiliary schema ready. Existing rows/passwords/volumes were preserved.")
 
 
 def prepare(stack=STACK, config_path=CONFIG, secret_path=SECRETS, runner=None):
@@ -166,11 +166,11 @@ def prepare(stack=STACK, config_path=CONFIG, secret_path=SECRETS, runner=None):
         d.need(config_path.is_file() and secret_path.is_file(), "Partial lab configuration; preserve files and inspect locally.")
         d.need(d.read_json(config_path).get("env") == "lab", "Existing configuration is not a lab profile.")
         fill_generated_admin_password(stack, secret_path)
-        print("Lab configuration already exists. Use eminerba-lab --dry-run or --maintenance; baseline was not recreated.")
+        d.log("Lab configuration already exists. Use eminerba-lab --dry-run or --maintenance; baseline was not recreated.")
         return
     compose = ["bash", str(d.ROOT / "scripts/compose"), "--project-directory", str(stack),
                "--env-file", str(stack / ".env"), "-p", p.LAB_PROJECT, "-f", str(stack / "docker-compose.yml")]
-    print("Building and starting the baseline (this can take several minutes).", flush=True)
+    d.log("Building and starting the baseline (this can take several minutes).", flush=True)
     run(compose + ["config", "-q"])
     run(compose + ["build", "--pull"], timeout=1800)
     run(compose + ["up", "-d"], timeout=600)
@@ -189,7 +189,7 @@ def prepare(stack=STACK, config_path=CONFIG, secret_path=SECRETS, runner=None):
     # The generated DB root password is known locally; never ask the user to copy it.
     fill_generated_admin_password(stack, secret_path)
     repair(stack, config_path, secret_path)
-    print("Baseline ready at http://127.0.0.1:8081/. Fill lab Datadog values and reviewed installer hashes once.")
+    d.log("Baseline ready at http://127.0.0.1:8081/. Fill lab Datadog values and reviewed installer hashes once.")
 
 
 def main(argv=None):
@@ -217,9 +217,8 @@ def main(argv=None):
             else:
                 prepare()
         return 0
-    except (d.Failure, OSError, ValueError, KeyError, TypeError) as exc:
-        message = str(exc) if isinstance(exc, d.Failure) else "Invalid lab data; details withheld to protect secrets."
-        print("ERROR lab " + args.action + ": " + message, file=sys.stderr)
+    except (d.Failure, OSError, ValueError, KeyError, TypeError, KeyboardInterrupt) as exc:
+        d.report_error(exc, "Lab rehearsal | " + args.action)
         return 1
 
 

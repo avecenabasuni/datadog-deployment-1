@@ -7,6 +7,6 @@ if docker compose version >/dev/null 2>&1; then
 elif docker-compose version >/dev/null 2>&1; then
   exec docker-compose "$@"
 else
-  printf '%s\n' 'Docker Compose tidak tersedia. Install docker compose atau docker-compose.' >&2
+  printf '%s\n' '[ERROR] Docker Compose is unavailable.' '[NEXT ] Install the Docker Compose plugin or docker-compose, then retry.' >&2
   exit 127
 fi

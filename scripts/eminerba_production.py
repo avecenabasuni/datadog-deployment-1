@@ -60,6 +60,7 @@ def mount_source(model, project, mount, directory):
 class Production:
     def __init__(self, app, compose_file, lab=False):
         self.app = app
+        self.app.coordinated = True
         self.c = app.c
         self.compose_file = Path(compose_file).resolve()
         self.directory = self.compose_file.parent
@@ -70,10 +71,13 @@ class Production:
         self.state_path = app.out / "production-state.json"
         self.lab = lab
         self.journal_enabled = False
+        self.step_number = 0
 
     def step(self, name):
         self.stage = name
-        print("\n[" + ("lab rehearsal" if self.lab else "production") + "] " + name, flush=True)
+        self.step_number += 1
+        d.log(("Lab rehearsal" if self.lab else "Production") + " | "
+              + str(self.step_number).zfill(2) + " | " + name[0].upper() + name[1:], "STEP")
         if self.journal_enabled:
             self.record_status("running")
 
@@ -233,13 +237,15 @@ class Production:
 
     def wait_database(self):
         deadline = time.monotonic() + max(300, self.c["timeout"])
+        last_error = None
         while True:
             try:
                 if self.app.mysql("SELECT 1;") == "1":
                     return
-            except d.Failure:
-                pass
-            d.need(time.monotonic() < deadline, "MySQL readiness timed out; preserved volume, inspect DB logs locally.")
+            except d.Failure as exc:
+                last_error = exc
+            if time.monotonic() >= deadline:
+                raise d.failure_context("MySQL readiness timed out; the data volume was preserved.", last_error)
             time.sleep(3)
 
     def recreate(self, service):
@@ -288,11 +294,11 @@ class Production:
     def run(self, dry=False):
         self.step("preflight and existing project/volume checks")
         report = self.check()
-        print("Project: " + self.project + "; services: web, api, db; data volume will be preserved.")
+        d.log("Project: " + self.project + "; services: web, api, db; data volume will be preserved.")
         if dry:
-            print("PLAN: render -> prepare pinned images/tools -> Agent -> SSI -> recreate DB -> DBM -> "
+            d.log("PLAN: render -> prepare pinned images/tools -> Agent -> SSI -> recreate DB -> DBM -> "
                   "recreate API/web -> RUM -> persist RUM -> recreate web -> verify/smoke.")
-            print("No deployment changes made. This is not end-to-end acceptance.")
+            d.log("No deployment changes made. This is not end-to-end acceptance.")
             return
         from eminerba_recovery import snapshot
         snapshot(self, report)
@@ -352,8 +358,9 @@ class Production:
         self.app.verify(self.app.preflight(full=True))
         self.app.smoke()
         self.record_status("local_checks_passed")
-        print("LOCAL CHECKS PASSED. Browser RUM, real HTTP PHP tracing, and DBM correlation remain manual acceptance.")
-        print("Keep the production override in future Compose operations: " + str(self.override))
+        d.log("Local deployment checks passed.", "OK")
+        d.log("Verify browser RUM, real HTTP PHP tracing and DBM correlation in Datadog.", "NEXT")
+        d.log("Keep this override in future Compose operations: " + str(self.override), "NEXT")
 
 
 def prepare(config_path, secret_path, compose_file, lab=False):
@@ -397,7 +404,7 @@ def prepare(config_path, secret_path, compose_file, lab=False):
     d.secure_write(config_path, d.jdump(c))
     d.secure_write(secret_path, d.jdump({"api_key": "REPLACE_NEW_DATADOG_API_KEY",
                                        "db_password": secrets.token_hex(24), "admin_password": ""}))
-    print("Prepared " + str(config_path) + " and " + str(secret_path) + ". Fill placeholders/admin password locally.")
+    d.log("Prepared " + str(config_path) + " and " + str(secret_path) + ". Fill placeholders/admin password locally.")
 
 
 def main(argv=None):
@@ -442,11 +449,7 @@ def main(argv=None):
             except (d.Failure, OSError):
                 pass
         stage = coordinator.stage if coordinator else "setup"
-        message = ("Interrupted by operator; inspect partial changes before recovery." if isinstance(exc, KeyboardInterrupt)
-                   else str(exc) if isinstance(exc, d.Failure)
-                   else "Invalid local configuration/data; details withheld to protect secrets.")
-        print("ERROR " + ("lab rehearsal" if args.lab else "production") + " " + stage + ": " + message, file=sys.stderr)
-        print("Stopped; no automatic rollback or volume deletion. Inspect the failed stage before rerunning.", file=sys.stderr)
+        d.report_error(exc, ("Lab rehearsal" if args.lab else "Production") + " | " + stage)
         return 1
 
 

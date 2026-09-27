@@ -1,5 +1,18 @@
 # Local test results
 
+## English CLI output and actionable diagnostics — 27 September 2026
+
+- Windows / Python 3.12: 118 tests, 111 passed, 7 POSIX-specific skips.
+- Ubuntu under WSL / Python 3.12: 118 tests, 117 passed, one Go-toolchain skip.
+- Coverage includes timestamped stderr output, clean JSON stdout, command labels,
+  exit codes, readiness failure context, bounded diagnostics, and credential
+  redaction for known values, URLs, SQL, headers and environment assignments.
+- Python 3.8 grammar compatibility and whitespace checks passed. These checks
+  do not establish successful deployment or telemetry delivery on a customer VM.
+- Context7 was used to consult the Python standard-library
+  [logging cookbook](https://github.com/python/cpython/blob/main/Doc/howto/logging-cookbook.rst)
+  and [subprocess documentation](https://github.com/python/cpython/blob/main/Doc/library/subprocess.rst).
+
 ## Shared locking, process cleanup and readiness — 27 September 2026
 
 - Windows / Python 3.12: 107 tests, 100 passed, 7 POSIX-specific skips.

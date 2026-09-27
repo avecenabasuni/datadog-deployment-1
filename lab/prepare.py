@@ -19,7 +19,7 @@ def prepare(root=ROOT, dry=False):
     if existing:
         raise deployment.Failure('Lab files already exist; preserve them and edit locally. No passwords were rotated.')
     if dry:
-        print('DRY-RUN: would create lab/.env, config/lab.json, config/lab-secrets.json; no files written.')
+        deployment.log('DRY-RUN: would create lab/.env, config/lab.json, config/lab-secrets.json; no files written.')
         return
     root_password = secrets.token_hex(24)
     application_password = secrets.token_hex(24)
@@ -46,7 +46,7 @@ def prepare(root=ROOT, dry=False):
                    'db_password': secrets.token_hex(24), 'admin_password': root_password}
     for path, body in zip(targets, [env, deployment.jdump(c), deployment.jdump(credentials)]):
         deployment.secure_write(path, body)
-    print('Created private lab configuration. Fill lab Datadog values locally; follow lab/README.md.')
+    deployment.log('Created private lab configuration. Fill lab Datadog values locally; follow lab/README.md.')
 
 
 def main():
@@ -57,8 +57,8 @@ def main():
         with deployment.deployment_lock():
             prepare(dry=args.dry_run)
         return 0
-    except (deployment.Failure, OSError) as error:
-        print(str(error) if isinstance(error, deployment.Failure) else 'Cannot prepare local lab files.', file=sys.stderr)
+    except (deployment.Failure, OSError, KeyboardInterrupt) as error:
+        deployment.report_error(error, 'Staged lab | prepare')
         return 1
 
 

@@ -113,8 +113,8 @@ def rollback(flow, dry=False):
             else:
                 d.need(Path(source).exists(), "Recovery bind source is missing; refusing empty replacement.")
     if dry:
-        print("PLAN: recreate db -> wait SQL -> api/web using original image IDs, runc and original mounts; disable tracing.")
-        print("Agent, host SSI, database contents and DBM SQL objects remain. No changes made.")
+        d.log("PLAN: recreate db -> wait SQL -> api/web using original image IDs, runc and original mounts; disable tracing.")
+        d.log("Agent, host SSI, database contents and DBM SQL objects remain. No changes made.")
         return
     overlay = {"services": {service: {"image": image, "runtime": "runc", "environment": {
         "DD_INSTRUMENT_SERVICE_WITH_APM": "false", "DD_TRACE_ENABLED": "false"}}
@@ -138,5 +138,5 @@ def rollback(flow, dry=False):
         verify_recovered(flow, saved, role)
     app.wait_http()
     flow.record_status("application_rollback_completed")
-    print("APPLICATION ROLLBACK COMPLETED. Check business endpoints manually; Agent, SSI and DBM objects remain.")
-    print("Use this override for subsequent uninstrumented operations: " + str(flow.override))
+    d.log("APPLICATION ROLLBACK COMPLETED. Check business endpoints manually; Agent, SSI and DBM objects remain.")
+    d.log("Use this override for subsequent uninstrumented operations: " + str(flow.override))

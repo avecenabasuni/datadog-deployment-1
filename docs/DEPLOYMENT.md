@@ -209,7 +209,15 @@ feature can be added through a separate change.
 SQL literals use explicit session `NO_BACKSLASH_ESCAPES` and doubled quotes;
 identifiers are strictly validated. Client passwords travel through stdin, not argv.
 Credentials briefly reside in the MySQL client process environment inside the
-container and remain visible to root. SQL error output is withheld to prevent leaks.
+container and remain visible to root. Command failures show bounded, credential-redacted
+diagnostics, the operation and exit code, and a suggested next step. Full command
+arguments and structured stdout dumps are not printed because they may contain secrets.
+
+Human-readable CLI messages are in English and go to stderr, using timestamped
+`STEP`, `INFO`, `OK`, `PLAN`, `ERROR`, `DETAIL`, `NEXT`, and `STOP` labels.
+Discovery, preflight, and verification JSON remains on stdout for automation.
+Readiness timeouts retain the last command failure to help identify the cause.
+The Compose compatibility wrapper passes through native Docker output.
 Procedures use `SQL SECURITY DEFINER`; the DBA reviews the definer and privileges.
 Do not remove the administrator/definer after provisioning. DDL is not transactional;
 inspect partial failures before rerunning.
