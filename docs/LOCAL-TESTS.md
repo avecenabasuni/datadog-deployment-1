@@ -1,5 +1,16 @@
 # Local test results
 
+## Production runbook verification — 27 September 2026
+
+- All 23 Bash examples in `PRODUCTION-RUNBOOK.md` passed `bash -n` without
+  executing their deployment commands.
+- Local links and section anchors in the README and documentation passed checks.
+- Command names, profile paths, generated defaults, timeouts and recovery scope
+  were compared against the current implementation. No runtime code changed.
+- Context7 supplied Docker/Datadog references; current vendor source documentation
+  was checked for Apache RUM and PHP/MySQL correlation. Operator-reported lab
+  success is recorded separately from local automated testing and production sign-off.
+
 ## Partial lab cleanup regression — 27 September 2026
 
 - Windows / Python 3.12: 129 tests, 122 passed, 7 POSIX-specific skips.

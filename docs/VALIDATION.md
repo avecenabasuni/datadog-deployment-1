@@ -85,8 +85,9 @@ Section names and JSON structure may differ between Agent versions.
 4. For APM–DBM, confirm propagation support for the actual driver and trace context
    in queries. Find a DBM query sample linked to the same SQL span; sampling can
    omit an individual request. Use repeated read-only traffic within an agreed
-   timeout, never an unbounded loop. For MySQLi-only applications, correlation
-   remains PENDING until actual-version support and working evidence are established.
+   timeout, never an unbounded loop. The current vendor matrix lists both PDO and
+   MySQLi for PHP/MySQL; for either driver, correlation remains PENDING until
+   actual-version support and working evidence are established.
    Do not switch drivers automatically.
 5. Verify explain plans for safe queries against real tables, not only SELECT 1.
 6. Observe error rates, latency, and resource usage for the team's agreed interval

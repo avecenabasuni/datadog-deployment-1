@@ -1,5 +1,8 @@
 # Eminerba production: one deployment command
 
+For the complete operator procedure, use the English
+[production runbook](PRODUCTION-RUNBOOK.md). This page summarizes the coordinator.
+
 This opt-in coordinator targets the supplied three-service stack in
 `/opt/eminerba_docker/docker-compose.yml`. It **does recreate production
 containers** when invoked with `--maintenance`. It is separate from the original
@@ -7,8 +10,9 @@ staged `datadog-bootstrap` command, which still leaves recreation to operators.
 Run during a maintenance window with an available database backup/restore path.
 SSI affects the host Docker runtime, including other workloads on that host.
 
-The coordinator has offline regression tests. It has not been run against the
-production machine; exercise the same layout in staging before production use.
+The coordinator has offline regression tests. The operator has reported successful
+lab deployment, telemetry checks, rollback and reapplication. Production execution
+and customer application acceptance have not been observed by this repository's tests.
 The [production-layout lab](../lab/rehearsal/README.md) creates dummy applications
 and uses this same coordinator with an explicitly isolated `env:lab` profile.
 
@@ -165,8 +169,9 @@ image aliases; preserve the same database volume.
 Local success is not end-to-end acceptance. Use the [validation checklist](VALIDATION.md)
 to prove actual HTTP PHP tracing, browser RUM sessions, and SQL correlation in
 Datadog. Configure Allowed Tracing URLs for the browser-visible API origin and
-check CORS if web/API use different origins or ports. MySQLi availability does
-not establish PDO-style APM–DBM correlation. External Apache Include/LoadModule
+check CORS if web/API use different origins or ports. The current vendor matrix
+lists PDO and MySQLi for MySQL correlation; confirm the actual driver/tracer version
+and working request evidence. External Apache Include/LoadModule
 dependencies outside the exported roots may require a tailored persistence image.
 
 The checks use Docker's [resolved Compose model](https://docs.docker.com/reference/cli/docker/compose/config/)

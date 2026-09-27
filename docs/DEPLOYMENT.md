@@ -33,9 +33,9 @@ SAPI because configuration can differ. The package does not force `DD_INJECT_FOR
 following that page's trace-metadata security recommendation. This intentionally
 differs from development's moving `:7` tag.
 
-[APM–DBM correlation documentation][correlation] lists PDO for PHP. APM supports
-MySQLi tracing, but MySQLi availability or propagation variables alone do not prove
-correlation. Verify the actual CodeIgniter request driver and SQL spans.
+[APM–DBM correlation documentation][correlation] currently lists both PDO and MySQLi
+for PHP/MySQL. Installed extensions or propagation variables alone do not prove
+correlation. Verify the actual CodeIgniter request driver, tracer version and SQL spans.
 The package does not change application drivers.
 
 ## Package and prerequisites

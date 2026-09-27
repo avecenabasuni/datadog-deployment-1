@@ -1,8 +1,11 @@
 # Finalization and production readiness
 
 Reviewed 27 September 2026. Repository checks are not production sign-off.
-The operator reported successful lab deployment before application rollback was
-added. The new rollback still needs the VM exercise below.
+The operator reported successful lab deployment, telemetry checks, application
+rollback and reapplication after the recovery exercise. This is operator-reported
+evidence; the assistant did not access the VM or independently inspect its results.
+Production application validation remains required. The exercise below is retained
+for repeatability. Use the [production runbook](PRODUCTION-RUNBOOK.md) for deployment.
 
 ## What is implemented
 

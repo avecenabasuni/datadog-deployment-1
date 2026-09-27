@@ -37,6 +37,10 @@ See the [full prerequisites](docs/DEPLOYMENT.md#package-and-prerequisites).
 
 ## Getting started
 
+For the existing customer stack, follow the complete English
+[production runbook](docs/PRODUCTION-RUNBOOK.md), including prerequisites,
+configuration, maintenance deployment, acceptance and recovery.
+
 Testing without the original application images? Start with the
 [production-layout rehearsal](lab/rehearsal/README.md) to test the same coordinator
 with dummy PHP/MySQL applications and `env:lab`:
@@ -113,6 +117,7 @@ remain unchanged. Use `scripts/eminerba-lab` as the rehearsal entry point.
 
 ## Documentation
 
+- [Complete step-by-step production runbook](docs/PRODUCTION-RUNBOOK.md)
 - [Finalization status and required recovery rehearsal](docs/RELEASE-READINESS.md)
 
 - [Deployment runbook, technical details, and official references](docs/DEPLOYMENT.md)
