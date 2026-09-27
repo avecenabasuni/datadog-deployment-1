@@ -1,7 +1,7 @@
 ARG PHP_IMAGE=php:8.1-apache-bookworm
 FROM ${PHP_IMAGE} AS base
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates gnupg tar gzip \
+    && apt-get install -y --no-install-recommends curl ca-certificates gnupg tar gzip coreutils util-linux \
     && docker-php-ext-install pdo_mysql mysqli \
     && cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 COPY common/health.php /var/www/html/health.php

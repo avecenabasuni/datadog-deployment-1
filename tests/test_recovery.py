@@ -75,9 +75,11 @@ class RecoveryTests(unittest.TestCase):
         self.baseline()
         events = []
         with patch.object(self.flow, "recreate", side_effect=lambda service: events.append(service)), \
+                patch.object(self.app, "wait_application", side_effect=lambda role: events.append("ready-" + role)), \
+                patch.object(self.app, "wait_http", side_effect=lambda: events.append("http-ready")), \
                 patch.object(self.flow, "wait_database", side_effect=lambda: events.append("sql-ready")):
             self.recover()
-        self.assertEqual(events, ["db", "sql-ready", "api", "web"])
+        self.assertEqual(events, ["db", "sql-ready", "api", "ready-api", "web", "ready-web", "http-ready"])
         overlay = d.read_json(self.app.out / "rollback.override.json")
         for service in overlay["services"].values():
             self.assertEqual(service["image"], self.image)

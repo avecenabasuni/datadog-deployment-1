@@ -1,5 +1,21 @@
 # Local test results
 
+## Shared locking, process cleanup and readiness — 27 September 2026
+
+- Windows / Python 3.12: 107 tests, 100 passed, 7 POSIX-specific skips.
+- Ubuntu under WSL / Python 3.12: 107 tests, 106 passed, one Go-toolchain skip.
+- Linux tests use real processes for cross-process lock contention/release,
+  SIGINT/SIGTERM cleanup, timeout with a child that ignores SIGTERM, and the RUM
+  supervisor/mutex behavior. Docker/installer deployment is not executed by these
+  tests; the supervisor is exercised directly using temporary files and processes.
+- Readiness tests cover retry after connection/HTTP failures, bounded deadlines,
+  redacted failures, original images without curl, and deployment/rollback order.
+- Existing real Compose parser checks still pass. No customer VM was accessed,
+  and no real SSI/RUM installation or production rollback was performed.
+
+The new required RUM tools (`timeout`, `flock`, `setsid`) are checked before use;
+the coordinator adds coreutils/util-linux to derived tool images when needed.
+
 ## Finalization and explicit recovery — 25 September 2026
 
 95 tests ran locally: 94 passed and one POSIX symlink test was skipped on Windows.

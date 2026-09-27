@@ -134,7 +134,9 @@ def rollback(flow, dry=False):
     flow.step("rollback API and web containers")
     for role in ("api", "web"):
         flow.recreate(role)
+        app.wait_application(role)
         verify_recovered(flow, saved, role)
+    app.wait_http()
     flow.record_status("application_rollback_completed")
     print("APPLICATION ROLLBACK COMPLETED. Check business endpoints manually; Agent, SSI and DBM objects remain.")
     print("Use this override for subsequent uninstrumented operations: " + str(flow.override))

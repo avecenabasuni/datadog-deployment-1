@@ -36,8 +36,8 @@ This exercises instrumentation, not CodeIgniter-specific behavior.
 Copy this repository to the VM. Run all commands below from the repository root:
 
 ```bash
-python3 lab/prepare.py --dry-run
-python3 lab/prepare.py
+sudo python3 lab/prepare.py --dry-run
+sudo python3 lab/prepare.py
 ```
 
 This writes private files with random database passwords:

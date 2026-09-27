@@ -323,6 +323,8 @@ class ProductionTests(unittest.TestCase):
                 patch.object(self.flow, "images", return_value={"web": "pinned-web", "api": "pinned-api", "db": "pinned-db"}), \
                 patch.object(self.flow, "compose"), patch.object(self.flow, "recreate", side_effect=recreate), \
                 patch.object(self.flow, "wait_database", side_effect=lambda: events.append("ready")), \
+                patch.object(self.app, "wait_application", side_effect=lambda role: events.append("ready-" + role)), \
+                patch.object(self.app, "wait_http", side_effect=lambda: events.append("http-ready")), \
                 patch.object(self.app, "start_agent", side_effect=lambda r: events.append("agent")), \
                 patch.object(self.app, "install_ssi", side_effect=lambda r: events.append("ssi")), \
                 patch.object(self.app, "inspect", return_value=self.report["selected"]["mysql"]), \
@@ -338,8 +340,9 @@ class ProductionTests(unittest.TestCase):
             events.clear()
             self.flow.run()
             self.assertEqual(events, first_events)
-        self.assertEqual(events, ["agent", "ssi", "recreate-db", "ready", "dbm", "recreate-api", "recreate-web",
-                                  "rum", "export", "recreate-web", "verify", "smoke"])
+        self.assertEqual(events, ["agent", "ssi", "recreate-db", "ready", "dbm", "recreate-api", "ready-api",
+                                  "recreate-web", "ready-web", "http-ready", "rum", "export", "recreate-web",
+                                  "ready-web", "http-ready", "verify", "smoke"])
         self.assertEqual(d.read_json(self.flow.state_path)["rum_override"], str(export / "persistence.override.example.json"))
         self.assertEqual(len(d.read_json(self.flow.override)["services"]["web"]["volumes"]), 3)
 

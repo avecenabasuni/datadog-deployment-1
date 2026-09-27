@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Staged Sucofindo production deployment; Python >=3.8, standard library only."""
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
 import platform
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -36,6 +38,17 @@ echo json_encode([
 'jit'=>ini_get('opcache.jit'),'jit_buffer'=>ini_get('opcache.jit_buffer_size'),
 'manual_ddtrace_ini'=>$manual]);"""
 APACHE_PROBE = "command -v apache2ctl || command -v apachectl || command -v httpd"
+LOCK_PATH = Path("/run/lock/eminerba-observability.lock")
+RUM_LOCK = "/run/datadog-rum-installer.lock"
+RUM_SUPERVISOR = '''setsid timeout --kill-after=5s "$@" &
+job=$!
+trap 'kill -KILL "-$job" 2>/dev/null || :' 0
+trap 'exit 143' TERM
+trap 'exit 130' INT
+wait "$job"
+status=$?
+exit "$status"
+'''
 
 
 class Failure(Exception):
@@ -45,6 +58,27 @@ class Failure(Exception):
 def need(condition, message):
     if not condition:
         raise Failure(message)
+
+
+@contextmanager
+def deployment_lock(path=LOCK_PATH):
+    """One host lock for all Python deployment entry points; never unlink it."""
+    need(os.name == "posix", "Run deployment commands on the target Ubuntu host.")
+    import fcntl
+    fd = os.open(str(path), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "a") as lock:
+        need(stat.S_ISREG(os.fstat(lock.fileno()).st_mode), "Deployment lock must be a regular file.")
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise Failure("Another deployment/staged command is active; retry after it finishes.") from exc
+        def interrupt(signum, frame):
+            raise KeyboardInterrupt()
+        previous = signal.signal(signal.SIGTERM, interrupt)
+        try:
+            yield
+        finally:
+            signal.signal(signal.SIGTERM, previous)
 
 
 def jdump(value):
@@ -153,15 +187,50 @@ class Runner:
 
     def run(self, args, data=None, env=None, check=True, timeout=None):
         try:
-            result = subprocess.run(args, input=data, text=True, encoding="utf-8", stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE, timeout=timeout or self.timeout,
-                                    env=env, shell=False)
+            if os.name == "posix":
+                process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, text=True, encoding="utf-8", env=env,
+                    shell=False, start_new_session=True)
+                try:
+                    stdout, stderr = process.communicate(input=data, timeout=timeout or self.timeout)
+                except BaseException:
+                    self.stop_group(process)
+                    raise
+                finally:
+                    for stream in (process.stdin, process.stdout, process.stderr):
+                        if stream:
+                            stream.close()
+                result = subprocess.CompletedProcess(args, process.returncode, stdout, stderr)
+            else:
+                # Windows is for offline tooling/tests, not host deployment.
+                result = subprocess.run(args, input=data, text=True, encoding="utf-8", stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, timeout=timeout or self.timeout,
+                                        env=env, shell=False)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise Failure("Command tidak tersedia atau timeout: " + args[0]) from exc
         if check and result.returncode:
             raise Failure("Command gagal: " + args[0] + " (exit " + str(result.returncode)
                           + "); output ditahan untuk melindungi secret.")
         return result
+
+    @staticmethod
+    def stop_group(process):
+        """Terminate the local session's process group, then escalate within 5 s."""
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        finally:
+            # Children may still exist even after the immediate parent exited.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=5)
 
 
 class Deployment:
@@ -294,7 +363,7 @@ class Deployment:
              "Apache config di luar root backup; review layout diperlukan.")
         self.docker("exec", c["web_container"], apache, "-t")
         if require_rum_tools:
-            for tool in ("curl", "tar", "gzip", "gpg", "sh"):
+            for tool in ("curl", "tar", "gzip", "gpg", "sh", "timeout", "flock", "setsid"):
                 self.docker("exec", c["web_container"], "sh", "-c", 'command -v "$1"', "sh", tool)
         for role in ("web", "api"):
             self.docker("exec", c[role + "_container"], "php", "-r",
@@ -469,6 +538,30 @@ class Deployment:
             need(time.monotonic() < deadline, "Timeout Agent health.")
             time.sleep(2)
 
+    def wait_probe(self, args, label):
+        deadline = time.monotonic() + max(300, self.c["timeout"])
+        while True:
+            remaining = deadline - time.monotonic()
+            need(remaining > 0, "Readiness timed out: " + label + "; inspect service logs locally.")
+            try:
+                if self.r.run(args, check=False, timeout=min(10, remaining)).returncode == 0:
+                    return
+            except Failure:
+                pass
+            remaining = deadline - time.monotonic()
+            need(remaining > 0, "Readiness timed out: " + label + "; inspect service logs locally.")
+            time.sleep(min(2, remaining))
+
+    def wait_application(self, role):
+        need(role in ("web", "api"), "Unsupported application readiness role.")
+        self.wait_probe(["docker", "exec", self.c[role + "_container"], "php", "-r",
+                         'exit(@fsockopen("127.0.0.1",80,$e,$m,2) ? 0 : 1);'], role + " Apache listener")
+
+    def wait_http(self):
+        for key in ("apm_url", "rum_url"):
+            self.wait_probe(["curl", "--fail", "--silent", "--show-error", "--max-time", "8",
+                             "--output", "/dev/null", self.c[key]], key + " HTTP response")
+
     def fetch(self):
         if self.dry:
             print("DRY-RUN: download dua installer ke artifact_dir untuk review; tidak download.")
@@ -633,6 +726,8 @@ class Deployment:
         c = self.c
         path = self.artifact("rum")
         uri = self.rum_connection()
+        if not self.dry:
+            self.rum_idle()
         modules = self.docker("exec", c["web_container"], report["apache"], "-M")
         if "datadog_module" in modules:
             print("Modul RUM existing: skip installer. Gunakan verify dan review config production.")
@@ -650,16 +745,18 @@ class Deployment:
         need(re.fullmatch(r"/tmp/dd-rum\.[A-Za-z0-9]+", work), "Temporary path RUM tidak valid.")
         self.docker("cp", str(path), c["web_container"] + ":" + work + "/installer.sh")
         help_text = self.docker("exec", "-u", "0", "-w", work, c["web_container"],
-                                "sh", "./installer.sh", "--help", timeout=600,
+                                "flock", "--nonblock", RUM_LOCK, "sh", "-c", RUM_SUPERVISOR, "sh", "600s",
+                                "sh", "./installer.sh", "--help", timeout=615,
                                 include_stderr=True)
         for flag in ("proxyKind", "appId", "site", "clientToken", "remoteConfigurationId", "agentUri"):
             need(flag in help_text, "Configurator RUM tidak mengiklankan flag " + flag
                  + "; hentikan, review installer sebelum konfigurasi Apache.")
-        self.docker("exec", "-u", "0", "-w", work, c["web_container"], "sh", "./installer.sh",
+        self.docker("exec", "-u", "0", "-w", work, c["web_container"],
+                    "flock", "--nonblock", RUM_LOCK, "sh", "-c", RUM_SUPERVISOR, "sh", "600s", "sh", "./installer.sh",
                     "--proxyKind", "httpd", "--appId", c["rum_application_id"],
                     "--site", c["site"], "--clientToken", c["rum_client_token"],
                     "--remoteConfigurationId", c["rum_remote_configuration_id"],
-                    "--agentUri", uri, timeout=600)
+                    "--agentUri", uri, timeout=615)
         # The Apache module's own APM tracing is separate from SSI PHP. RUM only here.
         self.docker("exec", "-i", "-u", "0", c["web_container"], "sh", "-c",
                     'cat >> "$1"', "sh", report["apache_config"],
@@ -671,10 +768,15 @@ class Deployment:
         self.docker("exec", c["web_container"], report["apache"], "-k", "graceful")
         return self.export_rum(report)
 
+    def rum_idle(self):
+        # Also catches a bounded installer whose Docker client was disconnected.
+        self.docker("exec", "-u", "0", self.c["web_container"], "flock", "--nonblock", RUM_LOCK, "true")
+
     def export_rum(self, report):
         if self.dry:
             print("DRY-RUN: export Apache + /opt/datadog-httpd dan manifest untuk persistence.")
             return
+        self.rum_idle()
         target = self.out / ("rum-persistence-" + str(time.time_ns()))
         target.mkdir(parents=True, mode=0o700)
         for source, name in ((report["apache_root"], "apache"), ("/opt/datadog-httpd", "module")):
@@ -799,6 +901,36 @@ def has_check_error(value):
     return False
 
 
+def run_stage(args):
+    config = read_json(args.config)
+    secrets = read_json(args.secrets, secret=True) if Path(args.secrets).exists() else {}
+    deploy = Deployment(config, secrets, dry=args.dry_run)
+    if args.stage == "discover":
+        print(jdump(deploy.discover()))
+        return 0
+    if args.stage == "fetch-installers":
+        validate(config)
+        deploy.fetch()
+        return 0
+    report = deploy.preflight(full=args.stage != "preflight")
+    if args.stage == "preflight":
+        print(jdump(report))
+        return 0
+    actions = {
+        "render": lambda: deploy.render(report),
+        "agent-start": lambda: deploy.start_agent(report),
+        "ssi-install": lambda: deploy.install_ssi(report),
+        "dbm-export": lambda: deploy.dbm_sql(report, export=True),
+        "dbm-apply": lambda: deploy.dbm_sql(report),
+        "rum-install": lambda: deploy.install_rum(report),
+        "rum-export": lambda: deploy.export_rum(report),
+        "verify": lambda: deploy.verify(report),
+        "smoke": deploy.smoke,
+    }
+    actions[args.stage]()
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Sucofindo Datadog staged production deployment")
     parser.add_argument("stage", choices=["discover", "preflight", "fetch-installers", "render",
@@ -810,36 +942,11 @@ def main(argv=None):
     parser.add_argument("--maintenance", action="store_true", help="window aktif untuk SSI / SQL / RUM")
     args = parser.parse_args(argv)
     try:
-        config = read_json(args.config)
-        secrets = read_json(args.secrets, secret=True) if Path(args.secrets).exists() else {}
-        deploy = Deployment(config, secrets, dry=args.dry_run)
-        if args.stage == "discover":
-            print(jdump(deploy.discover()))
-            return 0
-        if args.stage == "fetch-installers":
-            validate(config)
-            deploy.fetch()
-            return 0
-        report = deploy.preflight(full=args.stage != "preflight")
-        if args.stage == "preflight":
-            print(jdump(report))
-            return 0
         if args.stage in ("ssi-install", "dbm-apply", "rum-install") and not args.dry_run:
             need(args.maintenance, "Tahap ini membutuhkan --maintenance pada window yang disetujui.")
-        actions = {
-            "render": lambda: deploy.render(report),
-            "agent-start": lambda: deploy.start_agent(report),
-            "ssi-install": lambda: deploy.install_ssi(report),
-            "dbm-export": lambda: deploy.dbm_sql(report, export=True),
-            "dbm-apply": lambda: deploy.dbm_sql(report),
-            "rum-install": lambda: deploy.install_rum(report),
-            "rum-export": lambda: deploy.export_rum(report),
-            "verify": lambda: deploy.verify(report),
-            "smoke": deploy.smoke,
-        }
-        actions[args.stage]()
-        return 0
-    except (Failure, OSError, KeyError, ValueError, TypeError, IndexError) as exc:
+        with deployment_lock():
+            return run_stage(args)
+    except (Failure, OSError, KeyError, ValueError, TypeError, IndexError, KeyboardInterrupt) as exc:
         print("ERROR tahap " + args.stage + ": " + (str(exc) if isinstance(exc, Failure) else
                           "Konfigurasi/data lokal tidak valid; periksa field/file."), file=sys.stderr)
         return 1

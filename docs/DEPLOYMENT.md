@@ -49,7 +49,8 @@ The package does not change application drivers.
 - `tests/test_deploy.py`: offline mocked tests without Docker/server access.
 
 Host tools: Python 3, Bash, local rootful Docker CLI/daemon, curl, tar, sha256sum,
-dpkg-query, and systemctl. SSI installation requires root; Docker socket access
+dpkg-query, and systemctl. Use sudo for the deployment CLI entry points so they
+share the private host lock with the coordinator. SSI installation requires root; Docker socket access
 requires administrator privileges. Use `sudo bash scripts/compose` to automatically
 select **`docker compose`**, with **`docker-compose`** as a fallback.
 Agent automation uses Docker CLI directly and does not depend on the team's Compose
@@ -57,7 +58,8 @@ file. Remote/rootless Docker daemons are rejected to avoid installing SSI on a
 different host from the containers. Also review container distribution/architecture compatibility.
 
 Web containers require PHP CLI 8.1, Apache (`apache2ctl`, `apachectl`, or `httpd`),
-curl, tar, gzip, gpg, and sh. The database container requires `mysqld` and the
+curl, tar, gzip, gpg, sh, GNU `timeout`, `flock`, and `setsid` (coreutils/util-linux).
+The database container requires `mysqld` and the
 `mysql` client. Preflight does not install missing packages; the team adds them to its images.
 
 ## 1. Prepare local configuration on the host
@@ -66,7 +68,7 @@ curl, tar, gzip, gpg, and sh. The database container requires `mysqld` and the
 cp config/production.example.json config/production.json
 cp config/secrets.example.json config/secrets.json
 chmod 600 config/secrets.json
-bash scripts/datadog-bootstrap discover
+sudo bash scripts/datadog-bootstrap discover
 ```
 
 Populate configuration using discovery results. The production example keeps
@@ -90,9 +92,9 @@ JSON escaping for backslashes in passwords. Secrets are not printed, but Docker/
 operators can still inspect runtime credentials.
 
 ```bash
-bash scripts/datadog-bootstrap preflight
-bash scripts/datadog-bootstrap fetch-installers --dry-run
-bash scripts/datadog-bootstrap fetch-installers
+sudo bash scripts/datadog-bootstrap preflight
+sudo bash scripts/datadog-bootstrap fetch-installers --dry-run
+sudo bash scripts/datadog-bootstrap fetch-installers
 ```
 
 Review `ssi.sh` and `rum.sh` in `artifact_dir`, then set `ssi_sha256` and
@@ -114,8 +116,8 @@ RUM UI command as the final source of parameter values.
 ## 2. Render and review changes
 
 ```bash
-bash scripts/datadog-bootstrap render --dry-run
-bash scripts/datadog-bootstrap render
+sudo bash scripts/datadog-bootstrap render --dry-run
+sudo bash scripts/datadog-bootstrap render
 ```
 
 Preflight determines the MySQL version before rendering. The package accepts Oracle
@@ -155,8 +157,8 @@ Resolve `mysql_host` through the database network alias, not localhost.
 ## 3. Agent and SSI during maintenance
 
 ```bash
-bash scripts/datadog-bootstrap agent-start --dry-run
-bash scripts/datadog-bootstrap agent-start
+sudo bash scripts/datadog-bootstrap agent-start --dry-run
+sudo bash scripts/datadog-bootstrap agent-start
 sudo bash scripts/datadog-bootstrap ssi-install --dry-run
 sudo bash scripts/datadog-bootstrap ssi-install --maintenance
 ```
@@ -191,8 +193,8 @@ image, or mount definitions require recreation. The package performs none of the
 Operator path with local administrator credentials:
 
 ```bash
-bash scripts/datadog-bootstrap dbm-apply --dry-run
-bash scripts/datadog-bootstrap dbm-apply --maintenance
+sudo bash scripts/datadog-bootstrap dbm-apply --dry-run
+sudo bash scripts/datadog-bootstrap dbm-apply --maintenance
 ```
 
 Read checks precede SQL mutation: server version/datadir/application schemas,
@@ -215,7 +217,7 @@ inspect partial failures before rerunning.
 DBA path without sharing administrator credentials with the operator:
 
 ```bash
-bash scripts/datadog-bootstrap dbm-export
+sudo bash scripts/datadog-bootstrap dbm-export
 ```
 
 Transfer `dbm-dba-review.sql` securely. The DBA reads the initial version/datadir
@@ -233,8 +235,8 @@ ID. [Apache auto-injection][rum] was preview at the documentation review; check
 site/account availability and egress before maintenance. The Agent must be reachable from web.
 
 ```bash
-bash scripts/datadog-bootstrap rum-install --dry-run
-bash scripts/datadog-bootstrap rum-install --maintenance
+sudo bash scripts/datadog-bootstrap rum-install --dry-run
+sudo bash scripts/datadog-bootstrap rum-install --maintenance
 ```
 
 The script backs up the Apache root, checks configurator flags, runs the installer,
@@ -263,9 +265,9 @@ to resume without reinstalling.
 ## 6. Validation and permitted conclusions
 
 ```bash
-bash scripts/datadog-bootstrap verify
-bash scripts/datadog-bootstrap smoke --dry-run
-bash scripts/datadog-bootstrap smoke
+sudo bash scripts/datadog-bootstrap verify
+sudo bash scripts/datadog-bootstrap smoke --dry-run
+sudo bash scripts/datadog-bootstrap smoke
 ```
 
 Verification checks Agent health, SSI runtime, CLI tracer, socket access, allowlisted

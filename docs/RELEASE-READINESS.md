@@ -58,8 +58,9 @@ not prove rollback. SQL credentials must still match the preserved database.
    three services can experience downtime; this is not a rolling deployment.
 5. Reviewed installer entry scripts and downstream behavior. Hashes do not pin all
    downloads. Host SSI/Agent rollback and DBA changes remain separate procedures.
-6. No concurrent standalone stages, external Compose jobs or installers. The
-   coordinator's lock does not serialize unrelated external commands.
+6. No concurrent external Compose jobs or installers. All Python deployment CLI
+   entry points now share one host lock, including standalone stages. Direct
+   Docker/Compose commands and the Compose helper remain operator-controlled.
 
 Use [validation](VALIDATION.md), [recovery](ROLLBACK.md), and
 [local test evidence](LOCAL-TESTS.md) together. Do not mark production ready until

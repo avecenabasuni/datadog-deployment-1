@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -362,15 +363,13 @@ class DeploymentTests(unittest.TestCase):
 
     def test_critical_command_failure_does_not_leak(self):
         secret = "very-sensitive"
-        with patch.object(d.subprocess, "run", return_value=subprocess.CompletedProcess(["mysql"], 1, secret, secret)):
-            with self.assertRaises(d.Failure) as error:
-                d.Runner().run(["mysql"])
-            self.assertNotIn(secret, str(error.exception))
+        with self.assertRaises(d.Failure) as error:
+            d.Runner().run([sys.executable, "-c", "import sys; print('very-sensitive'); sys.exit(1)"])
+        self.assertNotIn(secret, str(error.exception))
 
     def test_timeout_nonzero(self):
-        with patch.object(d.subprocess, "run", side_effect=subprocess.TimeoutExpired(["mysql"], 1)):
-            with self.assertRaises(d.Failure):
-                d.Runner().run(["mysql"])
+        with self.assertRaises(d.Failure):
+            d.Runner().run([sys.executable, "-c", "import time; time.sleep(10)"], timeout=0.05)
 
     def test_main_missing_config_nonzero(self):
         with contextlib.redirect_stderr(io.StringIO()):
@@ -416,7 +415,8 @@ class DeploymentTests(unittest.TestCase):
         self.app.artifact = Mock(return_value=Path("/reviewed/rum.sh"))
         with patch.object(self.app, "docker", return_value="datadog_module (shared)") as docker:
             self.app.install_rum(self.report)
-            self.assertEqual(len(docker.call_args_list), 2)
+            self.assertEqual(len(docker.call_args_list), 3)
+            self.assertTrue(any("flock" in call.args for call in docker.call_args_list))
             self.assertTrue(all(call.args[0] == "exec" for call in docker.call_args_list))
 
     def test_rum_dry_run_no_backup_reload(self):
@@ -470,6 +470,12 @@ class DeploymentTests(unittest.TestCase):
                         [], 0, stdout, stderr)), patch.object(self.app, "docker", side_effect=docker) as mocked:
                     self.app.install_rum(self.report)
                 self.assertTrue(any("--proxyKind" in call.args for call in mocked.call_args_list))
+                for call in mocked.call_args_list:
+                    if "./installer.sh" in call.args:
+                        self.assertIn("flock", call.args)
+                        self.assertIn(d.RUM_SUPERVISOR, call.args)
+                        self.assertIn("600s", call.args)
+                        self.assertGreater(call.kwargs["timeout"], 605)
                 self.assertTrue(any("graceful" in call.args for call in mocked.call_args_list))
                 self.app.export_rum.assert_called_once_with(self.report)
 
@@ -489,6 +495,15 @@ class DeploymentTests(unittest.TestCase):
                 self.app.install_rum(self.report)
         self.assertFalse(any("--proxyKind" in call.args or "graceful" in call.args
                              for call in mocked.call_args_list))
+
+    def test_active_container_installer_blocks_backup_and_new_install(self):
+        self.app.artifact = Mock(return_value=Path("/reviewed/rum.sh"))
+        with patch.object(self.app, "rum_connection", return_value="http://agent:8126"), \
+                patch.object(self.app, "rum_idle", side_effect=d.Failure("installer active")), \
+                patch.object(self.app, "docker") as docker:
+            with self.assertRaisesRegex(d.Failure, "installer active"):
+                self.app.install_rum(self.report)
+        docker.assert_not_called()
 
     def test_agent_managed_rerun_health_only(self):
         self.app.render(self.report)

@@ -5,9 +5,10 @@
 Deployment stops on failure. **Rollback is explicit, not automatic.** A failed
 installer can leave changes or downstream processes behind; inspect the failed
 stage before starting recovery. Never run deployment, standalone stages, Docker
-maintenance, and rollback concurrently. The coordinator lock serializes its own
-apply/rollback and rehearsal commands, not external Docker commands or standalone
-`datadog-bootstrap` stages.
+maintenance, and rollback concurrently. One host lock serializes coordinator
+apply/rollback, lab prepare/repair, and standalone `datadog-bootstrap` stages.
+External Docker commands (including the `scripts/compose` helper) do not acquire
+this lock. Run deployment entry points with sudo; never delete a busy lock file.
 
 For production, from the repository:
 
@@ -123,9 +124,20 @@ their retention. Do not delete `/var/run/datadog` while other applications or Ag
    a removed runtime. The team recreates applications to remove residual injection.
 5. Verify normal PHP HTTP operation, no duplicate ddtrace, and normal error rates/latency.
 
-After an installer timeout, downstream subprocesses may still be running. Inspect
-processes, package state, and the Docker runtime before uninstalling or retrying.
-Do not run installation and uninstallation concurrently.
+On Linux, timeout/Ctrl-C/SIGTERM cleanup terminates the local command's process
+group, including children that outlive their parent. RUM help/install also run
+under an in-container supervisor with a 600-second timeout, group cleanup and a
+container mutex. Disconnecting Docker CLI does not remove that timeout or mutex;
+the job can remain active until its deadline. A new installer/export is refused
+while the mutex is held. Never delete either mutex file to bypass this check.
+
+These controls do not reverse completed changes or stop services deliberately
+detached into a different session/systemd. SIGKILL or host loss cannot run Python
+cleanup. Inspect package state and Docker before retrying or uninstalling; avoid
+concurrent installation/uninstallation.
+
+Process control references: [Python subprocess](https://docs.python.org/3/library/subprocess.html)
+and [GNU timeout](https://www.gnu.org/software/coreutils/manual/html_node/timeout-invocation.html).
 
 ## Applications and MySQL startup configuration
 

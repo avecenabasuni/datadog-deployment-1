@@ -78,7 +78,8 @@ sudo bash scripts/eminerba-production --dry-run
 
 This performs read-only inventory, Compose model, mount, database, credential,
 and installer hash checks. Docker builds and downstream installer compatibility
-cannot be proven by this preview. The lock file prevents concurrent coordinator runs.
+cannot be proven by this preview. The shared host lock prevents concurrent
+coordinator, standalone staged, and lab setup/repair runs.
 
 The deployment itself is one command:
 
@@ -94,17 +95,25 @@ It executes these steps and stops at the first failure:
    changed credentials/environment stop deployment without printing their values.
 2. Save a private recovery baseline before changing containers or host installers.
    Render settings. Tag the exact running image IDs locally. Build derived web/API
-   images with missing curl/tar/gzip/GPG packages as needed; do not rebuild the
+   images with missing curl/tar/gzip/GPG, coreutils and util-linux tools as needed; do not rebuild the
    application or pull a new PHP/MySQL base image.
 3. Start the managed Agent and install/reuse host SSI.
 4. Recreate only `db` with the same data volume, wait for SQL readiness, check
    startup settings, and provision DBM. The additional non-secret config is mounted
    read-only at `/etc/mysql/conf.d/zz-datadog.cnf` with mode 0644. Existing `my.cnf`
    stays mounted; effective settings are checked rather than assumed.
-5. Recreate `api` and `web` with tracing environment/socket mounts.
+5. Recreate `api` and `web` with tracing environment/socket mounts. Wait for each
+   Apache listener, then GET both configured read-only HTTP URLs with retries.
 6. Install web RUM, export Apache/module assets to the private output directory,
    attach the exports as read-only mounts, and recreate web to test persistence.
-7. Run local verification and HTTP smoke tests after recreation.
+7. Repeat web readiness and HTTP checks after RUM recreation, then run local
+   verification and smoke tests. Rollback uses the same readiness checks.
+
+Each readiness probe is capped at 10 seconds and retries within a deadline of
+`max(300, timeout)` seconds per listener/URL. URLs must be safe for repeated GETs
+and reachable from the host. No new customer health endpoint is required: the
+existing `apm_url` and `rum_url` configuration is used. This tests availability,
+not login or business-flow correctness.
 
 All recreation uses the discovered project and `--no-deps --no-build`. Existing
 mounts are checked again against the merged override before each recreation.

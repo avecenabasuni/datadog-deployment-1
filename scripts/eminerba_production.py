@@ -265,14 +265,15 @@ class Production:
                 images[service] = base
                 continue
             tools = self.app.r.run(["docker", "exec", container, "sh", "-c",
-                                   "command -v curl && command -v tar && command -v gzip && command -v gpg"], check=False)
+                                   "command -v curl && command -v tar && command -v gzip && command -v gpg && "
+                                   "command -v timeout && command -v flock && command -v setsid"], check=False)
             if tools.returncode == 0:
                 images[service] = base
                 continue
             context = self.app.out / ("tools-build-" + service)
             dockerfile = ("FROM " + base + "\nUSER root\n"
                           "RUN apt-get update && apt-get install -y --no-install-recommends "
-                          "ca-certificates curl gnupg tar gzip && rm -rf /var/lib/apt/lists/*\n")
+                          "ca-certificates curl gnupg tar gzip coreutils util-linux && rm -rf /var/lib/apt/lists/*\n")
             original_user = json.loads(self.app.docker("image", "inspect", "--format", "{{json .Config.User}}", image_id))
             d.need(original_user in ("", "root", "0"), "Derived image expects the supplied root Apache image.")
             d.secure_write(context / "Dockerfile", dockerfile)
@@ -327,7 +328,10 @@ class Production:
         self.app.dbm_sql(report)
         self.step("recreate API and web with SSI settings")
         self.recreate("api")
+        self.app.wait_application("api")
         self.recreate("web")
+        self.app.wait_application("web")
+        self.app.wait_http()
         report = self.app.preflight(full=True)
         self.step("install RUM and persist Apache/module assets")
         export = self.app.install_rum(report) or self.app.export_rum(report)
@@ -342,6 +346,8 @@ class Production:
         self.state["rum_override"] = str(persistence_path)
         self.save_state()
         self.recreate("web")
+        self.app.wait_application("web")
+        self.app.wait_http()
         self.step("verify after recreation and HTTP smoke")
         self.app.verify(self.app.preflight(full=True))
         self.app.smoke()
@@ -415,12 +421,7 @@ def main(argv=None):
         if args.action in ("apply", "rollback"):
             d.need(args.dry_run or args.maintenance, "Application/DB recreation requires --maintenance.")
         # Serialize runs across configurations; no competing installer processes.
-        import fcntl
-        with open("/run/lock/eminerba-observability.lock", "w") as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
-                raise d.Failure("Another production run is active.") from exc
+        with d.deployment_lock():
             if args.action == "prepare":
                 d.need(not args.dry_run, "prepare writes configuration; use apply --dry-run after setup.")
                 prepare(args.config, args.secrets, args.compose_file, lab=args.lab)

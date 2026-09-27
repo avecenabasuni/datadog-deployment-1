@@ -56,7 +56,7 @@ Run from the package directory on the target host:
 cp config/production.example.json config/production.json
 cp config/secrets.example.json config/secrets.json
 chmod 600 config/secrets.json
-bash scripts/datadog-bootstrap discover
+sudo bash scripts/datadog-bootstrap discover
 ```
 
 Fill in the [production configuration](config/production.example.json) using discovery
@@ -64,8 +64,8 @@ results and populate the [local secrets](config/secrets.example.json). Replace e
 placeholder; never commit credentials. Container names may differ from Compose service names.
 
 ```bash
-bash scripts/datadog-bootstrap preflight
-bash scripts/datadog-bootstrap render --dry-run
+sudo bash scripts/datadog-bootstrap preflight
+sudo bash scripts/datadog-bootstrap render --dry-run
 ```
 
 Discovery and preflight do not modify the server. Every stage supports

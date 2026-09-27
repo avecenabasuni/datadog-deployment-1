@@ -54,7 +54,8 @@ def main():
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     try:
-        prepare(dry=args.dry_run)
+        with deployment.deployment_lock():
+            prepare(dry=args.dry_run)
         return 0
     except (deployment.Failure, OSError) as error:
         print(str(error) if isinstance(error, deployment.Failure) else 'Cannot prepare local lab files.', file=sys.stderr)

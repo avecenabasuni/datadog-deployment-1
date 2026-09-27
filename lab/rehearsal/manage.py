@@ -211,12 +211,7 @@ def main(argv=None):
             d.need(args.dry_run or args.maintenance, "Lab SQL repair requires --maintenance.")
         else:
             d.need(not args.dry_run, "prepare builds the dummy lab; --dry-run applies to deployment or repair.")
-        import fcntl
-        with open("/run/lock/eminerba-observability.lock", "w") as lock:
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
-                raise d.Failure("Another deployment is active.") from exc
+        with d.deployment_lock():
             if args.action == "repair":
                 repair(dry=args.dry_run)
             else:
