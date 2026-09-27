@@ -61,6 +61,8 @@ class ProductionTests(unittest.TestCase):
                 target, (kind, source) = p.mount_source(self.model, self.flow.project, mount, self.root)
                 item["mounts"].append({"Destination": target, "Type": kind, "Name": source,
                                        "Source": source, "RW": True})
+                if kind == "bind":
+                    Path(source).mkdir(parents=True, exist_ok=True)
 
     def test_existing_project_named_volume_and_sources_are_validated(self):
         self.flow.validate_stack(self.report, self.model)
@@ -100,7 +102,7 @@ class ProductionTests(unittest.TestCase):
         self.flow.base_digest = p.digest(self.model)
         with patch.object(self.flow, "model", return_value=self.model):
             self.flow.recreate("db")
-        commands = [args for args, _ in self.app.r.calls]
+        commands = [args for args, _ in self.app.r.calls if args[:2] == ["docker", "compose"]]
         self.assertEqual(len(commands), 2)
         self.assertIn("actual-project", commands[-1])
         self.assertIn(str(self.compose_file), commands[-1])

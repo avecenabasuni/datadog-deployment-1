@@ -1,5 +1,23 @@
 # Local test results
 
+## Lifecycle and diagnostics audit — 27 September 2026
+
+- Windows / Python 3.12: 126 tests, 119 passed, 7 POSIX-specific skips.
+- Ubuntu under WSL / Python 3.12: 126 tests, 125 passed, one Go-toolchain skip.
+- Eight added regression tests cover failure/interruption journaling under the
+  host lock, a failed journal write preserving the original error, invalid UTF-8
+  diagnostics, PWD versus MYSQL_PWD redaction, per-probe readiness deadlines, and
+  missing bind/volume sources blocking recreation.
+- Existing recovery, dry-run, schema repair, credential handling, Compose parser,
+  RUM supervisor and real Linux process/lock tests passed.
+- Bash entry-point syntax, Python 3.8 grammar, JSON templates, local documentation
+  links and whitespace checks passed.
+- Review covered the CLI entry points and shared runner, production and lab
+  lifecycle, recovery baseline/overrides, generated configuration and SQL
+  templates, and runbooks. Remaining VM acceptance is documented in
+  [release readiness](RELEASE-READINESS.md); no customer VM or Datadog account was
+  accessed, and no real database/installer deployment was performed.
+
 ## English CLI output and actionable diagnostics — 27 September 2026
 
 - Windows / Python 3.12: 118 tests, 111 passed, 7 POSIX-specific skips.

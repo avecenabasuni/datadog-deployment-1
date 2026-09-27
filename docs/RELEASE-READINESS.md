@@ -1,6 +1,6 @@
 # Finalization and production readiness
 
-Reviewed 25 September 2026. Repository checks are not production sign-off.
+Reviewed 27 September 2026. Repository checks are not production sign-off.
 The operator reported successful lab deployment before application rollback was
 added. The new rollback still needs the VM exercise below.
 
@@ -11,8 +11,13 @@ added. The new rollback still needs the VM exercise below.
   preservation, schema preflight and pinned running images.
 - Explicit application rollback using immutable original image IDs and checked
   mounts, including stopped-container recovery. No volume deletion or data restore.
-- Private recovery metadata and a last-stage status file; interruption/error
-  reporting without subprocess output or secret values.
+- Private recovery metadata and a last-stage status file. Failure/interruption
+  status is written before releasing the host lock. Console errors include bounded,
+  credential-redacted diagnostics; structured command output is not dumped.
+- Agent and MySQL readiness probes respect the remaining deadline, including each
+  command timeout. Non-UTF-8 output no longer hides the original command failure.
+- Existing bind sources and named volumes are rechecked immediately before each
+  container recreation, in both apply and rollback, to refuse empty replacements.
 - RUM mount persistence, non-secret MySQL config permissions, and lab-only schema
   repair. Installer entry scripts require reviewed hashes.
 - Regression tests, real Compose parser checks, and Linux shell line endings.

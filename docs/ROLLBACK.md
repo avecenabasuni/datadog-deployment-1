@@ -81,7 +81,9 @@ do not edit hashes to bypass checks.
 | Rollback itself | Stop and inspect the reported stage; no automatic rollback of rollback |
 
 `deployment-status.json` records the last stage and status without command output
-or credentials. Ctrl-C and handled errors record interruption/failure. Power loss
+or credentials. Ctrl-C and handled errors record interruption/failure before the
+host lock is released. If the status file cannot be updated, the console reports
+that failure while preserving the original deployment error. Power loss
 or SIGKILL can leave `running`; this means the final outcome is unknown, not success.
 
 ## Manual component procedures

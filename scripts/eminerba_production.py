@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Opt-in lifecycle coordinator for the supplied Eminerba production Compose stack."""
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -85,6 +86,19 @@ class Production:
         d.secure_write(self.app.out / "deployment-status.json", d.jdump({
             "status": status, "stage": self.stage, "project": self.project,
             "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}))
+
+    @contextmanager
+    def track_failure(self):
+        """Write the final failure state while the caller still owns the host lock."""
+        try:
+            yield
+        except BaseException as exc:
+            if self.journal_enabled:
+                try:
+                    self.record_status("interrupted" if isinstance(exc, KeyboardInterrupt) else "failed")
+                except (d.Failure, OSError):
+                    d.log("Could not update deployment-status.json; inspect the last reported stage.", "WARN")
+            raise
 
     def select_backend(self):
         if self.app.r.run(["docker", "compose", "version"], check=False).returncode == 0:
@@ -239,14 +253,18 @@ class Production:
         deadline = time.monotonic() + max(300, self.c["timeout"])
         last_error = None
         while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise d.failure_context("MySQL readiness timed out; the data volume was preserved.", last_error)
             try:
-                if self.app.mysql("SELECT 1;") == "1":
+                if self.app.mysql("SELECT 1;", timeout=min(10, remaining)) == "1":
                     return
             except d.Failure as exc:
                 last_error = exc
-            if time.monotonic() >= deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 raise d.failure_context("MySQL readiness timed out; the data volume was preserved.", last_error)
-            time.sleep(3)
+            time.sleep(min(3, remaining))
 
     def recreate(self, service):
         d.need(digest(self.model()) == self.base_digest, "Compose/env changed during deployment; stopping before recreation.")
@@ -257,6 +275,13 @@ class Production:
                              for mount in merged["services"][name].get("volumes", []))
             d.need(all(resulting.get(target) == source for target, source in mounts.items()),
                    "Merged override changes an existing mount: " + name)
+        # Compose can silently create an empty replacement for a missing source.
+        # Check again immediately before recreation, including during rollback.
+        for kind, source in self.preserved_mounts[service].values():
+            if kind == "volume":
+                self.app.docker("volume", "inspect", "--format", "{{.Name}}", source)
+            else:
+                d.need(Path(source).exists(), "Bind source is missing; refusing empty replacement: " + source)
         self.compose("up", "-d", "--no-deps", "--no-build", "--force-recreate", service, overlay=True)
 
     def images(self):
@@ -436,18 +461,14 @@ def main(argv=None):
             c = d.read_json(args.config)
             credentials = d.read_json(args.secrets, secret=True)
             coordinator = Production(d.Deployment(c, credentials), args.compose_file, lab=args.lab)
-            if args.action == "rollback":
-                from eminerba_recovery import rollback
-                rollback(coordinator, dry=args.dry_run)
-            else:
-                coordinator.run(dry=args.dry_run)
+            with coordinator.track_failure():
+                if args.action == "rollback":
+                    from eminerba_recovery import rollback
+                    rollback(coordinator, dry=args.dry_run)
+                else:
+                    coordinator.run(dry=args.dry_run)
         return 0
     except (d.Failure, OSError, ValueError, KeyError, TypeError, IndexError, KeyboardInterrupt) as exc:
-        if coordinator and coordinator.journal_enabled:
-            try:
-                coordinator.record_status("interrupted" if isinstance(exc, KeyboardInterrupt) else "failed")
-            except (d.Failure, OSError):
-                pass
         stage = coordinator.stage if coordinator else "setup"
         d.report_error(exc, ("Lab rehearsal" if args.lab else "Production") + " | " + stage)
         return 1

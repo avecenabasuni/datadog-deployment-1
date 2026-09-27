@@ -191,13 +191,14 @@ class Runner:
         env = dict(os.environ if env is None else env)
         env["LC_ALL"] = "C.UTF-8"
         sensitive = [value for key, value in env.items()
-                     if re.search(r"password|passwd|pwd|secret|token|api.?key|credential|db_pass", key, re.I)]
+                     if key.upper() not in ("PWD", "OLDPWD") and
+                     re.search(r"password|passwd|pwd|secret|token|api.?key|credential|db_pass", key, re.I)]
         self.redactor.add(sensitive)
         register_secrets(sensitive)
         try:
             if os.name == "posix":
                 process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE, text=True, encoding="utf-8", env=env,
+                    stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", env=env,
                     shell=False, start_new_session=True)
                 try:
                     stdout, stderr = process.communicate(input=data, timeout=timeout or self.timeout)
@@ -211,7 +212,7 @@ class Runner:
                 result = subprocess.CompletedProcess(args, process.returncode, stdout, stderr)
             else:
                 # Windows is for offline tooling/tests, not host deployment.
-                result = subprocess.run(args, input=data, text=True, encoding="utf-8", stdout=subprocess.PIPE,
+                result = subprocess.run(args, input=data, text=True, encoding="utf-8", errors="replace", stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, timeout=timeout or self.timeout,
                                         env=env, shell=False)
         except subprocess.TimeoutExpired as exc:
@@ -411,13 +412,13 @@ class Deployment:
              "The explicit service mapping does not match the Compose label: " + role)
         value = label or explicit
         need(value and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", value),
-             "Label Compose kosong; isi " + role + "_compose_service.")
+             "Missing Compose service label; set " + role + "_compose_service.")
         return value
 
     def render(self, report):
         c = self.c
         need(len({self.service(report, role) for role in ("web", "api", "mysql")}) == 3,
-             "Mapping Compose memiliki service duplikat; review multi-project mapping.")
+             "Duplicate Compose service mapping; review the project and service configuration.")
         projects = {item.get("project") for item in report["selected"].values() if item.get("project")}
         need(len(projects) <= 1, "Containers belong to different Compose projects; create separate reviewed overrides.")
         self.secret("api_key")
@@ -551,14 +552,23 @@ class Deployment:
 
     def wait_agent(self):
         deadline = time.monotonic() + self.c["timeout"]
+        last_error = None
         while True:
-            result = self.r.run(["docker", "exec", self.c["agent_name"], "agent", "health"], check=False)
-            if result.returncode == 0:
-                return
-            if time.monotonic() >= deadline:
-                raise failure_context("Agent health check timed out.",
-                    command_error(["docker", "exec", self.c["agent_name"], "agent", "health"], result))
-            time.sleep(2)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise failure_context("Agent health check timed out.", last_error)
+            args = ["docker", "exec", self.c["agent_name"], "agent", "health"]
+            try:
+                result = self.r.run(args, check=False, timeout=min(10, remaining))
+                if result.returncode == 0:
+                    return
+                last_error = command_error(args, result)
+            except Failure as exc:
+                last_error = exc
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise failure_context("Agent health check timed out.", last_error)
+            time.sleep(min(2, remaining))
 
     def wait_probe(self, args, label):
         deadline = time.monotonic() + max(300, self.c["timeout"])
@@ -607,7 +617,9 @@ class Deployment:
                 need(len(body) <= 4 * 1024 * 1024 and body.startswith(b"#!"), "The downloaded artifact is not a supported installer script.")
                 secure_write(path, body.decode("utf-8"))
             except (OSError, UnicodeError) as exc:
-                raise Failure("Installer download failed; no installer was executed.") from exc
+                raise Failure("Installer download failed; no installer was executed.",
+                              details=Redactor(self.s.values()).clean(str(exc))[:4000],
+                              hint="Check outbound HTTPS, DNS and the installer download endpoint before retrying.") from exc
             log(name + " SHA256=" + hashlib.sha256(path.read_bytes()).hexdigest())
         log("Review the scripts and downstream downloads, then record the approved hashes in the active configuration.")
 
@@ -651,16 +663,17 @@ class Deployment:
         else:
             log("HANDOFF SSI: Recreate application containers to apply SSI; a restart alone does not inject the tracer.")
 
-    def mysql(self, sql, admin=True):
+    def mysql(self, sql, admin=True, timeout=None):
         """Password via stdin, never Docker argv or container environment config."""
         password = self.secret("admin_password" if admin else "db_password")
         user = self.c["admin_user" if admin else "db_user"]
         script = ('IFS= read -r MYSQL_PWD; export MYSQL_PWD; '
-                  'exec mysql --protocol=tcp --host=127.0.0.1 --port="$1" --user="$2" '
+                  'exec mysql --protocol=tcp --connect-timeout=5 --host=127.0.0.1 --port="$1" --user="$2" '
                   '--batch --raw --skip-column-names --binary-mode --default-character-set=utf8mb4 '
                   '--init-command="SET SESSION sql_mode=\'NO_BACKSLASH_ESCAPES\'"')
         return self.docker("exec", "-i", self.c["mysql_container"], "sh", "-c", script,
-                           "sh", str(self.c["mysql_port"]), user, data=password + "\n" + SQL_MODE + sql)
+                           "sh", str(self.c["mysql_port"]), user, data=password + "\n" + SQL_MODE + sql,
+                           **({"timeout": timeout} if timeout is not None else {}))
 
     def procedures(self):
         result = {}
@@ -880,17 +893,17 @@ class Deployment:
             parsed = json.loads(check)
         except ValueError as exc:
             raise Failure("The Agent MySQL check did not return valid JSON; review the installed Agent's output format.") from exc
-        need(parsed and not has_check_error(parsed), "Agent MySQL integration melaporkan error.")
+        need(parsed and not has_check_error(parsed), "The Agent MySQL integration reported errors; inspect its check output locally.")
         modules = self.docker("exec", c["web_container"], report["apache"], "-M")
         need("datadog_module" in modules, "The RUM module is not loaded.")
         self.rum_connection()
         status = json.loads(self.docker("exec", c["agent_name"], "agent", "status", "-j"))
-        need(isinstance(status, dict) and status, "Agent status kosong.")
+        need(isinstance(status, dict) and status, "Agent status is empty or is not a JSON object.")
         print(jdump({"basic_local_checks": "PASS", "agent_status_sections": sorted(status),
                      "feature_flags_requested": {k: c[k] for k in (
                          "runtime_security", "network_monitoring", "universal_service_monitoring")},
                      "feature_health": "REVIEW_REQUIRED: APM/logs/process/security/system-probe sections; docs/VALIDATION.md",
-                     "telemetry": "PENDING: web SAPI, traffic browser, RUM–APM, APM–DBM, logs, fitur opsional."}))
+                     "telemetry": "PENDING: web SAPI, browser traffic, RUM-APM, APM-DBM, logs and optional features."}))
 
     def smoke(self):
         if self.dry:
