@@ -95,7 +95,9 @@ class CliOutputTests(unittest.TestCase):
     def test_invalid_json_reports_path_and_location_without_file_contents(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "settings.json"
-            path.write_text('{"password":"private",\n}', encoding="utf-8")
+            # An invalid key starts on line 2 across Python versions; newer
+            # parsers report trailing commas at their location on line 1.
+            path.write_text('{"password":"private",\ninvalid}', encoding="utf-8")
             with self.assertRaises(d.Failure) as caught:
                 d.read_json(path)
             self.assertIn(str(path), str(caught.exception))

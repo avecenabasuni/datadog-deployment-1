@@ -77,6 +77,11 @@ Discovery and preflight do not modify the server. Every stage supports
 
 ## Deployment workflow
 
+New configurations enable runtime security, network monitoring, Universal Service
+Monitoring and process collection by default for the POC. Verify their host
+requirements before deployment and their telemetry during acceptance. Existing
+profiles keep their saved flags; see the [configuration and migration guidance](docs/PRODUCTION-RUNBOOK.md#6-complete-the-configuration-and-secrets).
+
 Follow the [deployment runbook](docs/DEPLOYMENT.md) for commands and stage requirements.
 Do not execute all stages as an unattended batch without review.
 

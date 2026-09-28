@@ -213,6 +213,8 @@ class RehearsalTests(unittest.TestCase):
         c = d.read_json(self.config)
         self.assertEqual(c["env"], "lab")
         self.assertEqual(c["agent_name"], p.LAB_PROJECT + "-agent")
+        for feature in ("runtime_security", "network_monitoring", "universal_service_monitoring"):
+            self.assertIs(c[feature], True)
         self.assertEqual(c["output_dir"], str(self.stack.parent / "generated"))
         self.assertEqual(c["artifact_dir"], str(self.stack.parent / "artifacts"))
         self.assertEqual(c["apm_url"], "http://127.0.0.1:8081/api/")

@@ -285,7 +285,7 @@ Smoke testing sends GET requests to operator-selected endpoints: use a read-only
 endpoint that actually executes SQL. Response bodies are not printed. SDK markers
 in HTML prove injection only.
 
-Verification marks only performed local checks as PASS. Review optional status
+Verification marks only performed local checks as PASS. Review Agent feature status
 sections using the [checklist](VALIDATION.md). A CLI extension does not prove HTTP
 SAPI instrumentation or delivered telemetry. Generate browser sessions, API requests,
 and SQL, then verify RUM–APM and APM–DBM links in Datadog. Configure Allowed Tracing
@@ -305,18 +305,23 @@ There is no automatic remote deployment or SSH execution.
 | Infrastructure/APM, non-local DogStatsD, sockets | Enabled; parameterized network/socket, no published host ports |
 | All container logs and automatic multiline detection | Enabled; excludes the Agent using its configured name |
 | Process collection | Enabled by default; requires host PID and read-only passwd/group |
-| Runtime security | Disabled by default; independent opt-in |
-| Network monitoring | Disabled by default; independent opt-in |
-| Universal Service Monitoring | Disabled by default; independent opt-in |
-| Host root/os-release | Mounted when runtime security or USM is selected |
-| debugfs, host cgroup, unconfined AppArmor | Only when a system-probe feature is selected |
-| SYS_ADMIN, SYS_RESOURCE, SYS_PTRACE, NET_ADMIN, NET_BROADCAST, NET_RAW, IPC_LOCK, CHOWN | Added for system-probe options following official examples; broad host access |
+| Runtime security | Enabled by default for the POC |
+| Network monitoring | Enabled by default for the POC |
+| Universal Service Monitoring | Enabled by default for the POC |
+| Host root/os-release | Mounted by default for runtime security and USM |
+| debugfs, host cgroup, unconfined AppArmor | Included by default for system-probe features |
+| SYS_ADMIN, SYS_RESOURCE, SYS_PTRACE, NET_ADMIN, NET_BROADCAST, NET_RAW, IPC_LOCK, CHOWN | Included by default for system-probe features; broad host access |
 | KILL | Omitted: automated response is out of scope and official monitoring examples do not require it |
 | Agent run directory, Docker socket/proc/cgroup/container logs | Preserved with parameterized host paths |
 
-The three opt-in features are not automatically enabled in production. Review
-requirements, kernel/eBPF support, billing, privileges, and health before enabling
-each. The package does not use `--privileged`. See [CNM][cnm], [USM][usm], and
+Runtime security, network monitoring and USM are enabled in new configurations
+and included in POC acceptance. Review requirements, kernel/eBPF support, billing,
+privileges and capacity before maintenance; verify each feature's health and
+telemetry afterward. Existing configuration files retain their saved values:
+set all three flags to `true` for this POC. Existing rendered output or Agents
+require a reviewed migration when specifications change; use a new versioned
+output directory and the [Agent procedure](ROLLBACK.md#agent).
+The package does not use `--privileged`. See [CNM][cnm], [USM][usm], and
 [Workload Protection][security] for capabilities/platform requirements. If runtime
 compilation requires kernel headers, the team adds appropriate mounts following
 official documentation; the package does not install kernel packages or automatically weaken host policy.

@@ -18,7 +18,7 @@ or user request bodies. Status remains unaccepted until runtime and telemetry ev
 - [ ] Verify the new API key/site and production RUM application/client token/configuration ID.
 - [ ] Review both installer entry scripts and transitive downloads; record hashes. RUM configurator help recognizes all required flags.
 - [ ] Allow HTTPS/TLS egress to registries, installers, Datadog intake, and RUM CDN/intake without disabling TLS verification.
-- [ ] Review security/CNM/USM options and host privileges separately; owners approve telemetry scope and billing.
+- [ ] Confirm runtime security, CNM, USM and process collection are enabled for the POC; review host privileges, kernel/eBPF support, telemetry scope and billing.
 - [ ] Review snippet merges with `sudo bash scripts/compose ... config -q`; do not print full configuration that may contain secrets.
 
 ## After the recreation handoff
@@ -51,10 +51,10 @@ Section names and JSON structure may differ between Agent versions.
 - [ ] Collector/forwarder are healthy, the API key is accepted, and there are no intake errors.
 - [ ] The APM Agent is running and receives traces after API/web requests.
 - [ ] The Logs Agent is running, expected container inputs are active, and sent byte/log counts increase.
-- [ ] When selected, the Process Agent is running and process/container inventory appears in Datadog.
-- [ ] When CNM is selected, system-probe/network starts without eBPF/permission/kernel errors and connection data is visible.
-- [ ] When USM is selected, service-monitoring is healthy and HTTP services are observed; this does not replace PHP SSI traces.
-- [ ] When runtime security is selected, security-agent/runtime is healthy and workloads are visible. Run self-tests/alert tests only under the team's procedures.
+- [ ] The Process Agent is running and process/container inventory appears in Datadog.
+- [ ] CNM system-probe/network starts without eBPF/permission/kernel errors and connection data is visible.
+- [ ] USM service-monitoring is healthy and HTTP services are observed; this does not replace PHP SSI traces.
+- [ ] Runtime security-agent is healthy and workloads are visible. Run self-tests/alert tests only under the team's procedures.
 - [ ] Compare CPU, memory, disk, and log volume with the pre-window baseline.
 
 ## RUM persistence and injection

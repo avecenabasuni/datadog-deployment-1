@@ -43,6 +43,8 @@ class LabTests(unittest.TestCase):
         c = json.loads((self.root / 'config/lab.json').read_text())
         self.assertEqual(c['env'], 'lab')
         self.assertEqual(c['mysql_host'], 'eminerba-db')
+        for feature in ('runtime_security', 'network_monitoring', 'universal_service_monitoring'):
+            self.assertIs(c[feature], True)
         if os.name != 'nt':
             self.assertEqual(secret_file.stat().st_mode & 0o777, 0o600)
             self.assertEqual(env_file.stat().st_mode & 0o777, 0o600)

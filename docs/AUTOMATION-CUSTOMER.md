@@ -7,7 +7,9 @@ Dokumen ini menjelaskan pekerjaan yang dilakukan automation
 
 Tujuannya adalah memasang monitoring infrastruktur, log container, penelusuran
 request PHP (APM), monitoring MySQL (DBM), dan monitoring pengalaman pengguna
-browser (RUM) pada aplikasi yang sudah berjalan.
+browser (RUM) pada aplikasi yang sudah berjalan. Runtime security, network
+monitoring dan Universal Service Monitoring (USM) juga diaktifkan secara default
+sebagai cakupan POC, bersama pengumpulan proses.
 
 **Eksekusi deployment membutuhkan maintenance window dan downtime karena
 container database, API, dan web akan dibuat ulang.** Volume database yang sudah
@@ -96,7 +98,21 @@ meninggalkan sebagian objek yang sudah dibuat.
 | APM | Trace request PHP dan span database sesuai instrumentasi, konfigurasi dan sampling |
 | DBM | Metrik MySQL, informasi query dan sampel query sesuai konfigurasi |
 | RUM | Informasi sesi, halaman dan resource browser sesuai konfigurasi aplikasi RUM |
-| Fitur opsional | Runtime security, network monitoring dan Universal Service Monitoring nonaktif secara default; aktivasi memerlukan peninjauan akses, kapasitas dan cakupan layanan |
+| Runtime security | Aktif secara default untuk POC; mengumpulkan informasi keamanan runtime workload |
+| Network monitoring | Aktif secara default untuk POC; memantau koneksi dan lalu lintas jaringan workload |
+| Universal Service Monitoring (USM) | Aktif secara default untuk POC; mengamati layanan melalui system-probe, melengkapi tracing PHP |
+
+Ketiga fitur tersebut dikonfigurasi pada Agent saat deployment. Persiapan POC
+mencakup pengecekan kernel/eBPF, akses host, kapasitas dan ketersediaan layanan
+Datadog terkait. Agent menggunakan mount host dan capability tambahan sesuai
+konfigurasi fitur. Keberhasilan POC harus dibuktikan dengan kesehatan komponen
+dan data runtime security, koneksi jaringan, layanan USM serta proses yang terlihat
+di Datadog; flag aktif saja belum membuktikan fitur berfungsi.
+
+Default ini berlaku untuk konfigurasi baru. Konfigurasi lama dengan nilai
+`false` perlu diperbarui oleh operator. Jika Agent sudah terpasang, perubahan
+spesifikasinya mengikuti prosedur migrasi Agent pada runbook; deployment tidak
+mengganti Agent yang sudah ada secara otomatis.
 
 Agent mengirim telemetry ke site Datadog yang dikonfigurasi; browser memerlukan
 akses ke layanan RUM terkait. Customer perlu menyepakati cakupan data, sampling,

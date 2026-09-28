@@ -52,6 +52,13 @@ the web container's `DB_NAME`/`DB_NAME2`. Confirm that these include the API's
 actual schemas. It downloads installer scripts for review without executing them.
 It refuses existing configuration rather than generating different passwords.
 
+New configurations enable runtime security, network monitoring, Universal Service
+Monitoring and process collection by default for the POC. Confirm kernel/eBPF,
+host privileges, capacity and Datadog product availability before deployment;
+include evidence for all four features in acceptance. Existing configuration
+files retain their values. Follow the [configuration guidance](PRODUCTION-RUNBOOK.md#6-complete-the-configuration-and-secrets)
+when updating older profiles or an existing Agent.
+
 Fill these once:
 
 - `agent_image`: an exact reviewed `registry.datadoghq.com/agent:7.X.Y`, >=7.76.1.

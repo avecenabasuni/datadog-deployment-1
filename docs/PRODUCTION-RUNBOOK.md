@@ -223,7 +223,8 @@ PHP/Apache themselves and required application extensions must already work.
 - [ ] Review the host-wide SSI effect on other workloads. All external Compose
   jobs, upgrades and installers are paused for the window.
 - [ ] Review collection scope, sampling, log/query sensitivity and resource/billing
-  impact. Runtime security, network monitoring and USM are separate optional choices.
+  impact. Runtime security, network monitoring and USM are enabled by default
+  and included in POC acceptance; confirm kernel/eBPF support and host access.
 - [ ] Agree on downtime, rollback triggers, observation interval and sign-off owner.
 
 ## 3. Get the approved repository revision
@@ -356,7 +357,15 @@ sudo chmod 600 config/eminerba.json config/eminerba-secrets.json
 | `ssi_sha256`, `rum_sha256` | Approved entry-script hashes from step 7 |
 | `timeout` | Integer 1–1800 seconds; default 60; see readiness behavior in step 9 |
 | `process_collection` | Default `true`; review process collection scope |
-| `runtime_security`, `network_monitoring`, `universal_service_monitoring` | Default `false`; enable only after kernel, privilege, capacity and product-scope review |
+| `runtime_security`, `network_monitoring`, `universal_service_monitoring` | Default `true`; all three are included in the POC. Confirm kernel/eBPF support, privileges, capacity and Datadog product availability before maintenance |
+
+New `prepare` output inherits these POC defaults. Existing configuration files
+are not overwritten: set all three feature flags to `true` for the POC before
+the first render/deployment. If output or an Agent already exists, use a new
+versioned `output_dir` and review the Agent migration; render and Agent ownership
+guards intentionally reject silently changing a deployed specification. Follow
+the [Agent component procedure](ROLLBACK.md#agent) and retain the
+existing recovery artifacts.
 
 `mysql_schemas` must list existing business databases. Do not use `eminerba_lab`
 or `eminerba_lab_aux`, create empty customer schemas, or include system schemas
@@ -539,8 +548,8 @@ sudo docker inspect --format '{{.Name}} {{.HostConfig.Runtime}}' eminerba_web em
 ```
 
 Expected: the managed Agent is healthy; Docker default and web/API runtime are
-`dd-shim`. Inspect Agent status locally for APM, logs, forwarder and enabled optional
-features; section presence alone does not prove delivery. Review/redact diagnostics
+`dd-shim`. Inspect Agent status locally for APM, logs, forwarder, process collection,
+runtime security, network monitoring and USM; section presence alone does not prove delivery. Review/redact diagnostics
 before sharing. Container log output may include application data or credentials.
 
 Recheck the recorded database mount and Apache syntax/module:
@@ -595,7 +604,7 @@ service/environment/version. The wrapper does not infer all browser SDK settings
 | RUM | Real browser session/view/resource for the intended production application |
 | RUM–APM | A RUM resource opens the matching backend trace |
 | APM–DBM | A database span/query sample can be correlated for the actual driver and tracer |
-| Optional features | Each enabled process/network/USM/security feature is healthy and visible |
+| POC features | Process collection, runtime security, network monitoring and USM are all enabled, healthy and visible in Datadog |
 
 Configure RUM Allowed Tracing URLs for the browser-visible API origins/paths,
 agreed sampling and propagators. If web uses port 81 and API uses port 80, those

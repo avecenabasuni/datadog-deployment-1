@@ -304,12 +304,32 @@ class DeploymentTests(unittest.TestCase):
         self.app.dbm_sql(self.report)
         self.assertTrue(all(call.args[0].startswith("SELECT") for call in self.app.mysql.call_args_list))
 
-    def test_optional_features_privileges_independent(self):
-        self.assertEqual(self.app.agent_spec()["caps"], [])
+    def test_poc_defaults_enable_features_with_required_agent_access(self):
+        spec = self.app.agent_spec()
+        for env in ("DD_RUNTIME_SECURITY_CONFIG_ENABLED", "DD_SYSTEM_PROBE_NETWORK_ENABLED",
+                    "DD_SYSTEM_PROBE_SERVICE_MONITORING_ENABLED",
+                    "DD_PROCESS_CONFIG_PROCESS_COLLECTION_ENABLED"):
+            self.assertEqual(spec["environment"][env], "true")
+        self.assertEqual(spec["caps"], d.CAPS)
+        self.assertTrue(spec["host_pid"])
+        self.assertTrue(spec["host_cgroup"])
+        self.assertTrue(spec["unconfined_apparmor"])
+        self.assertEqual(spec["environment"]["HOST_ROOT"], "/host/root")
+        for mount in ("/sys/kernel/debug:/sys/kernel/debug", "/:/host/root:ro",
+                      "/etc/os-release:/etc/os-release:ro",
+                      "/etc/passwd:/etc/passwd:ro", "/etc/group:/etc/group:ro"):
+            self.assertIn(mount, spec["mounts"])
+        self.assertNotIn("KILL", spec["caps"])
+
+    def test_feature_privileges_remain_independent_for_explicit_overrides(self):
+        baseline = copy.deepcopy(self.c)
+        baseline.update(runtime_security=False, network_monitoring=False,
+                        universal_service_monitoring=False)
+        self.assertEqual(d.Deployment(baseline).agent_spec()["caps"], [])
         for feature, env in (("runtime_security", "DD_RUNTIME_SECURITY_CONFIG_ENABLED"),
                              ("network_monitoring", "DD_SYSTEM_PROBE_NETWORK_ENABLED"),
                              ("universal_service_monitoring", "DD_SYSTEM_PROBE_SERVICE_MONITORING_ENABLED")):
-            c = copy.deepcopy(self.c)
+            c = copy.deepcopy(baseline)
             c[feature] = True
             spec = d.Deployment(c).agent_spec()
             self.assertEqual(spec["environment"][env], "true")
@@ -549,6 +569,7 @@ class DeploymentTests(unittest.TestCase):
                 patch.object(d.platform, "machine", return_value="x86_64"), \
                 patch.object(d.shutil, "which", return_value="/usr/bin/tool"), \
                 patch.object(d.Path, "read_text", return_value='ID=ubuntu\nVERSION_ID="22.04"'), \
+                patch.object(d.Path, "exists", return_value=True), \
                 patch.object(app, "discover", return_value=inv), \
                 patch.object(app, "inspect", side_effect=lambda name: selected[
                     {"prod-web-1": "web", "prod-api-1": "api", "prod-db-1": "mysql"}[name]]), \

@@ -212,6 +212,9 @@ class ProductionTests(unittest.TestCase):
         self.assertEqual(prepared["mysql_schemas"], ["eminerba", "second_database"])
         self.assertEqual(prepared["mysql_config_target"], "/etc/mysql/conf.d/zz-datadog.cnf")
         self.assertEqual(prepared["db_apps"], ["web", "api"])
+        for feature in ("runtime_security", "network_monitoring", "universal_service_monitoring",
+                        "process_collection"):
+            self.assertIs(prepared[feature], True)
         self.assertEqual(d.read_json(secret_path)["admin_password"], "")
         self.assertEqual(len(d.read_json(secret_path)["db_password"]), 48)
         app.fetch.assert_called_once()

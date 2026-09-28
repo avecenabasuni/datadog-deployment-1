@@ -903,7 +903,7 @@ class Deployment:
                      "feature_flags_requested": {k: c[k] for k in (
                          "runtime_security", "network_monitoring", "universal_service_monitoring")},
                      "feature_health": "REVIEW_REQUIRED: APM/logs/process/security/system-probe sections; docs/VALIDATION.md",
-                     "telemetry": "PENDING: web SAPI, browser traffic, RUM-APM, APM-DBM, logs and optional features."}))
+                     "telemetry": "PENDING: web SAPI, browser traffic, RUM-APM, APM-DBM, logs, process, runtime security, network monitoring and USM."}))
 
     def smoke(self):
         if self.dry:
