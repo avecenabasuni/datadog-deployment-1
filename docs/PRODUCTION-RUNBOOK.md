@@ -16,6 +16,60 @@ The operator reported successful lab deployment, telemetry validation, rollback
 and reapplication. This is operator-reported rehearsal evidence, not an observed
 production deployment. Customer application behavior must still be verified.
 
+## Deployment flowchart
+
+This diagram follows `scripts/eminerba-production`. Preparation and acceptance
+include operator/customer actions; the maintenance block runs automatically.
+For a customer-facing explanation in Indonesian, see
+[Cakupan automation untuk customer](AUTOMATION-CUSTOMER.md).
+
+```mermaid
+flowchart TD
+    A["Operator and customer: confirm scope, baseline, backup and recovery owner"]
+    B["Operator: prepare configuration, fill secrets and review installer hashes"]
+    C["Run eminerba-production --dry-run"]
+    D{"Preview passes?"}
+    E["Resolve findings and repeat preview"]
+    F["Operator: start approved maintenance window"]
+
+    subgraph AUTO["Automation: eminerba-production --maintenance"]
+        G["Revalidate project, mounts, credentials, network and installers"]
+        H["Save recovery baseline, render overlay and pin images; add missing tools if needed"]
+        I["Start managed Agent and install or reuse host SSI"]
+        J["Recreate DB with existing data volume; wait for SQL and provision DBM"]
+        K["Recreate API, then web; check Apache and HTTP readiness"]
+        L["Install web RUM and export Apache/module assets as persistent mounts"]
+        M["Recreate web again; repeat readiness, verification and smoke checks"]
+        G --> H --> I --> J --> K --> L --> M
+    end
+
+    N["Customer and operator: validate business flows and telemetry in Datadog"]
+    O{"Acceptance passes?"}
+    P["Record sign-off; retain overlays, exports and recovery artifacts"]
+    Q["Stop and inspect failed stage; rollback is not automatic"]
+    R{"Recovery decision"}
+    S["Fix cause; repeat preview before any maintenance reapply"]
+    T["Preview application rollback; execute during maintenance if prerequisites pass"]
+    U["Restore DB, API and web containers using original images and data mount; verify application"]
+    V["Use component or manual recovery when required"]
+
+    A --> B --> C --> D
+    D -->|No| E --> C
+    D -->|Yes| F --> G
+    M --> N --> O
+    O -->|Yes| P
+    O -->|No| Q
+    AUTO -->|Any stage fails or is interrupted| Q
+    Q --> R
+    R -->|Retry after correction| S --> C
+    R -->|Application rollback| T --> U
+    R -->|Other recovery needed| V
+```
+
+Application rollback retains current database contents and leaves the Agent,
+host SSI and DBM SQL objects in place. Recovery details and prerequisites are in
+[step 12](#12-handle-failures-and-perform-rollback).
+
 ## Contents
 
 1. [Scope and target layout](#1-scope-and-target-layout)
