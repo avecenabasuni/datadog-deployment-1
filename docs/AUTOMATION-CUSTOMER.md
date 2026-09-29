@@ -179,4 +179,4 @@ Penjelasan ini mengikuti implementasi pada
 [coordinator produksi](../scripts/eminerba_production.py),
 [deployment komponen](../scripts/datadog_deploy.py), dan
 [pemulihan aplikasi](../scripts/eminerba_recovery.py). Bukti penerimaan dicatat
-mengikuti [production runbook](PRODUCTION-RUNBOOK.md#15-handover-record-and-references).
+mengikuti [production runbook](PRODUCTION-RUNBOOK.md#keep-these-files-and-record-the-result).

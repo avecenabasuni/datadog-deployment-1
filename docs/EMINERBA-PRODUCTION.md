@@ -56,7 +56,7 @@ New configurations enable runtime security, network monitoring, Universal Servic
 Monitoring and process collection by default for the POC. Confirm kernel/eBPF,
 host privileges, capacity and Datadog product availability before deployment;
 include evidence for all four features in acceptance. Existing configuration
-files retain their values. Follow the [configuration guidance](PRODUCTION-RUNBOOK.md#6-complete-the-configuration-and-secrets)
+files retain their values. Follow the [configuration guidance](PRODUCTION-RUNBOOK.md#5-fill-in-the-settings)
 when updating older profiles or an existing Agent.
 
 Fill these once:
