@@ -212,6 +212,8 @@ class ProductionTests(unittest.TestCase):
         self.assertEqual(prepared["mysql_schemas"], ["eminerba", "second_database"])
         self.assertEqual(prepared["mysql_config_target"], "/etc/mysql/conf.d/zz-datadog.cnf")
         self.assertEqual(prepared["db_apps"], ["web", "api"])
+        self.assertEqual(prepared["rum_url"], "")
+        self.assertEqual(prepared["apm_url"], "")
         for feature in ("runtime_security", "network_monitoring", "universal_service_monitoring",
                         "process_collection"):
             self.assertIs(prepared[feature], True)

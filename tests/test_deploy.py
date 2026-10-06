@@ -70,6 +70,29 @@ class DeploymentTests(unittest.TestCase):
     def test_valid_config(self):
         d.validate(config(), full=True)
 
+    def test_http_urls_are_optional_and_independent(self):
+        for urls in ({}, {"rum_url": "", "apm_url": ""},
+                     {"rum_url": None, "apm_url": None},
+                     {"rum_url": "https://web.example/"},
+                     {"apm_url": "https://api.example/read-only"}):
+            with self.subTest(urls=urls):
+                c = config()
+                c.pop("rum_url")
+                c.pop("apm_url")
+                c.update(urls)
+                d.validate(c, full=True)
+
+    def test_configured_http_urls_still_require_valid_values(self):
+        for key in ("rum_url", "apm_url"):
+            for value in ("https://REPLACE_URL/", "ftp://example.test/", "   ",
+                          "https://user:password@example.test/", "https://bad url/",
+                          False, 0, [], {}):
+                with self.subTest(key=key, value=value):
+                    c = config()
+                    c[key] = value
+                    with self.assertRaisesRegex(d.Failure, key):
+                        d.validate(c, full=True)
+
     @unittest.skipUnless(shutil.which("go"), "Go required to evaluate Docker templates")
     def test_inspect_templates_execute_with_present_missing_and_null_labels(self):
         self.runner.response = "null"
@@ -233,6 +256,57 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(self.runner.calls, [])
         self.assertFalse(Path(self.c["output_dir"]).exists())
         self.assertFalse(Path(self.c["artifact_dir"]).exists())
+
+    def test_smoke_checks_only_configured_urls_and_reports_skips(self):
+        for urls in ({}, {"rum_url": "", "apm_url": ""},
+                     {"rum_url": None, "apm_url": None},
+                     {"rum_url": "https://web.example/"},
+                     {"apm_url": "https://api.example/read-only"},
+                     {"rum_url": "https://web.example/", "apm_url": "https://api.example/read-only"}):
+            with self.subTest(urls=urls):
+                c = config()
+                c.pop("rum_url")
+                c.pop("apm_url")
+                c.update(urls)
+                runner = FakeRunner("<html>DD_RUM</html>")
+                app = d.Deployment(c, runner=runner)
+                with patch.object(d, "log") as log:
+                    app.smoke()
+                expected = [c[key] for key in ("apm_url", "rum_url") if c.get(key)]
+                self.assertEqual([args[-1] for args, _ in runner.calls], expected)
+                messages = "\n".join(call.args[0] for call in log.call_args_list)
+                for key in ("apm_url", "rum_url"):
+                    if c.get(key):
+                        self.assertIn(key + " HTTP smoke", messages)
+                    else:
+                        self.assertIn("Skipping " + key, messages)
+                        self.assertNotIn(key + " HTTP smoke", messages)
+                if not c.get("rum_url"):
+                    self.assertNotIn("RUM injection checks passed", messages)
+
+    def test_smoke_still_requires_rum_markers_when_web_url_is_configured(self):
+        self.c.pop("apm_url")
+        self.runner.response = "<html>No injection</html>"
+        with self.assertRaisesRegex(d.Failure, "RUM injection markers"):
+            self.app.smoke()
+        self.assertEqual(len(self.runner.calls), 1)
+
+    def test_smoke_still_propagates_configured_endpoint_failures(self):
+        self.c.pop("rum_url")
+        with patch.object(self.runner, "run", side_effect=d.Failure("HTTP request failed")):
+            with self.assertRaisesRegex(d.Failure, "HTTP request failed"):
+                self.app.smoke()
+
+    def test_smoke_dry_run_does_not_report_checks_as_passed(self):
+        self.app.dry = True
+        self.c.pop("rum_url")
+        with patch.object(d, "log") as log:
+            self.app.smoke()
+        self.assertEqual(self.runner.calls, [])
+        messages = "\n".join(call.args[0] for call in log.call_args_list)
+        self.assertIn("DRY-RUN: GET apm_url", messages)
+        self.assertIn("Skipping rum_url", messages)
+        self.assertNotIn("passed", messages)
 
     def test_mysql_credentials_only_in_stdin(self):
         self.app.mysql("SELECT 1;")

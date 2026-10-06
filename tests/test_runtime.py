@@ -170,6 +170,26 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual([args[-1] for args in commands], [app.c["apm_url"], app.c["rum_url"]])
         self.assertTrue(all("--fail" in args and "--output" in args for args in commands))
 
+    def test_http_readiness_skips_missing_empty_and_null_urls_independently(self):
+        for urls in ({}, {"rum_url": "", "apm_url": ""},
+                     {"rum_url": None, "apm_url": None},
+                     {"rum_url": "https://web.example/"},
+                     {"apm_url": "https://api.example/read-only"}):
+            with self.subTest(urls=urls):
+                c = config()
+                c.pop("rum_url")
+                c.pop("apm_url")
+                c.update(urls)
+                app = d.Deployment(c, runner=FakeRunner())
+                with patch.object(d, "log") as log:
+                    app.wait_http()
+                expected = [c[key] for key in ("apm_url", "rum_url") if c.get(key)]
+                self.assertEqual([args[-1] for args, _ in app.r.calls], expected)
+                messages = "\n".join(call.args[0] for call in log.call_args_list)
+                for key in ("apm_url", "rum_url"):
+                    if not c.get(key):
+                        self.assertIn("Skipping " + key + " HTTP readiness", messages)
+
 
 if __name__ == "__main__":
     unittest.main()

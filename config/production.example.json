@@ -37,7 +37,7 @@
   "rum_application_id": "REPLACE_PRODUCTION_RUM_APPLICATION_ID",
   "rum_client_token": "REPLACE_PRODUCTION_PUBLIC_CLIENT_TOKEN",
   "rum_remote_configuration_id": "REPLACE_PRODUCTION_REMOTE_CONFIGURATION_ID",
-  "rum_url": "https://REPLACE_PRODUCTION_WEB/",
-  "apm_url": "https://REPLACE_PRODUCTION_API/READ_ONLY_DB_ENDPOINT",
+  "rum_url": "",
+  "apm_url": "",
   "timeout": 60
 }

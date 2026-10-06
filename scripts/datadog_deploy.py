@@ -178,8 +178,11 @@ def validate(c, full=False):
     identifier(c["db_user"])
     need(set(c.get("db_apps", [])) <= {"web", "api"} and c.get("db_apps"), "db_apps must contain web and/or api.")
     for key in ("rum_url", "apm_url"):
-        value = c.get(key, "")
-        need(filled(value) and re.fullmatch(r"https?://[^@\s]+", value), key + " must be an HTTP(S) URL without embedded credentials.")
+        value = c.get(key)
+        if value is None or value == "":
+            continue
+        need(filled(value) and re.fullmatch(r"https?://[^@\s]+", value),
+             key + " must be an HTTP(S) URL without embedded credentials, or empty to skip HTTP checks.")
 
 
 class Runner:
@@ -599,8 +602,12 @@ class Deployment:
 
     def wait_http(self):
         for key in ("apm_url", "rum_url"):
+            url = self.c.get(key)
+            if not url:
+                log("Skipping " + key + " HTTP readiness: no URL configured.")
+                continue
             self.wait_probe(["curl", "--fail", "--silent", "--show-error", "--max-time", "8",
-                             "--output", "/dev/null", self.c[key]], key + " HTTP response")
+                             "--output", "/dev/null", url], key + " HTTP response")
 
     def fetch(self):
         if self.dry:
@@ -906,16 +913,23 @@ class Deployment:
                      "telemetry": "PENDING: web SAPI, browser traffic, RUM-APM, APM-DBM, logs, process, runtime security, network monitoring and USM."}))
 
     def smoke(self):
-        if self.dry:
-            log("DRY-RUN: GET the configured application/browser endpoints; no requests sent.")
-            return
         for key in ("apm_url", "rum_url"):
+            url = self.c.get(key)
+            if not url:
+                log("Skipping " + key + " smoke checks: no URL configured.")
+                continue
+            if self.dry:
+                log("DRY-RUN: GET " + key + "; no requests sent.")
+                continue
             body = self.run(["curl", "--fail", "--silent", "--show-error", "--max-time",
-                             str(self.c["timeout"]), self.c[key]])
+                             str(self.c["timeout"]), url])
             if key == "rum_url":
                 need(re.search(r"datadog-rum|datadoghq-browser-agent|DD_RUM", body),
                      "RUM injection markers were not found in HTML; check CSP, compression and the returned page.")
-        log("HTTP smoke and RUM injection checks passed. Verify browser sessions and trace correlation in Datadog.")
+                log("rum_url HTTP smoke and RUM injection checks passed.", "OK")
+            else:
+                log("apm_url HTTP smoke check passed.", "OK")
+        log("Verify browser sessions and trace correlation in Datadog.", "NEXT")
 
 
 def mysql_version(text):

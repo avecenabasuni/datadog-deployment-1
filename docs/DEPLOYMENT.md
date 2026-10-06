@@ -281,9 +281,12 @@ sudo bash scripts/datadog-bootstrap smoke
 Verification checks Agent health, SSI runtime, CLI tracer, socket access, allowlisted
 environment settings, Performance Schema, consumers, executable explain procedures,
 MySQL check JSON, Apache module, and the Agent endpoint. Critical failures return exit 1.
-Smoke testing sends GET requests to operator-selected endpoints: use a read-only
-endpoint that actually executes SQL. Response bodies are not printed. SDK markers
-in HTML prove injection only.
+Smoke testing sends GET requests to optional operator-selected `apm_url` and
+`rum_url` endpoints: use a read-only API endpoint that actually executes SQL.
+Either URL can be empty, omitted or `null` to skip its HTTP readiness and smoke
+checks. Skipped checks are logged and do not count as passing HTTP verification.
+Response bodies are not printed. SDK markers in HTML prove injection only.
+When URLs are absent, perform application request and RUM injection checks manually.
 
 Verification marks only performed local checks as PASS. Review Agent feature status
 sections using the [checklist](VALIDATION.md). A CLI extension does not prove HTTP

@@ -65,15 +65,20 @@ Fill these once:
 - `site`, application `version`, production RUM application/client token/remote
   configuration ID.
 - `mysql_schemas`: actual application databases, not container or service names.
-- `rum_url`: reachable web HTML URL; `apm_url`: a safe, read-only API endpoint that
-  exercises the database. The supplied ports are web 81 and API 80, but public
-  browser URLs can differ behind a proxy.
 - Secrets: new `api_key` and the existing MySQL admin password. Keep the generated
   `db_password` for the new DBM account; if a monitoring account already exists,
   provide its matching credentials and review its grants.
 - `ssi_sha256` and `rum_sha256`: reviewed installer hashes. Read the scripts and
   their downstream download behavior, then record the SHA-256 values printed by
   `prepare`. Entry script hashes do not pin all downloaded dependencies.
+
+Optional test URLs: `rum_url` is a reachable web HTML URL; `apm_url` is a safe,
+read-only API endpoint that exercises the database. The supplied ports are web 81
+and API 80, but public browser URLs can differ behind a proxy. Production preparation
+leaves both empty; the lab profile fills them with its local fixture URLs. Either
+URL can be empty, omitted or `null` to skip its HTTP checks. Replace old URL
+placeholders with real URLs or empty strings; nonempty values must be valid HTTP(S)
+URLs without embedded credentials.
 
 Files containing credentials are private and ignored by Git. Neither `.env` nor
 the original production Compose/Dockerfile is edited. A failed download during
@@ -114,17 +119,21 @@ It executes these steps and stops at the first failure:
    read-only at `/etc/mysql/conf.d/zz-datadog.cnf` with mode 0644. Existing `my.cnf`
    stays mounted; effective settings are checked rather than assumed.
 5. Recreate `api` and `web` with tracing environment/socket mounts. Wait for each
-   Apache listener, then GET both configured read-only HTTP URLs with retries.
+   Apache listener, then GET any configured read-only HTTP URLs with retries.
 6. Install web RUM, export Apache/module assets to the private output directory,
    attach the exports as read-only mounts, and recreate web to test persistence.
-7. Repeat web readiness and HTTP checks after RUM recreation, then run local
-   verification and smoke tests. Rollback uses the same readiness checks.
+7. Repeat web readiness and any configured HTTP checks after RUM recreation, then
+   run local verification and optional HTTP smoke tests. Rollback uses the same
+   readiness checks.
 
 Each readiness probe is capped at 10 seconds and retries within a deadline of
-`max(300, timeout)` seconds per listener/URL. URLs must be safe for repeated GETs
-and reachable from the host. No new customer health endpoint is required: the
-existing `apm_url` and `rum_url` configuration is used. This tests availability,
-not login or business-flow correctness.
+`max(300, timeout)` seconds per listener/URL. Configured URLs must be safe for
+repeated GETs and reachable from the host. No new customer health endpoint is
+required: the optional `apm_url` and `rum_url` configuration is used. Empty URLs
+skip their HTTP readiness and smoke checks with an explicit log message; Apache
+listener checks and local verification still run. These probes test availability,
+not login or business-flow correctness. Validate application requests, RUM
+injection and telemetry manually when the HTTP checks are skipped.
 
 All recreation uses the discovered project and `--no-deps --no-build`. Existing
 mounts are checked again against the merged override before each recreation.

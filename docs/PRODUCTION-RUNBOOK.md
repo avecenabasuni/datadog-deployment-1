@@ -185,14 +185,19 @@ Fill or confirm these values. Ask the team listed in step 1 if a value is unknow
 | `rum_application_id` | Production RUM application ID |
 | `rum_client_token` | Client token from that RUM application |
 | `rum_remote_configuration_id` | Remote configuration ID from the same Apache RUM setup |
-| `rum_url` | A website page that returns HTML |
-| `apm_url` | An API request that reads data from MySQL |
+| `rum_url` | Optional: a website page that returns HTML; leave empty or omit to skip web HTTP readiness and RUM injection smoke checks |
+| `apm_url` | Optional: an API request that reads data from MySQL; leave empty or omit to skip API HTTP readiness and smoke checks |
 | `ssi_sha256`, `rum_sha256` | File checksums from step 6 |
 
 For this stack, web uses host port **81** and API uses host port **80**.
-Use the correct application paths or public domain names. Both test URLs must
-work from the server without login, extra headers or redirects. Do not use a
-request that creates, updates or deletes data, or put passwords in a URL.
+If configuring test URLs, use the correct application paths or public domain names.
+Each configured URL must work from the server without login, extra headers or
+redirects. Do not use a request that creates, updates or deletes data, or put
+passwords in a URL. Both URLs are optional and independent; empty, omitted or
+`null` values skip their respective HTTP checks during deployment and rollback.
+Replace any old URL placeholders with real URLs or empty strings. Container
+listener checks and local observability verification still run. When HTTP checks
+are skipped, validate application requests, RUM injection and telemetry manually.
 
 Keep generated paths, container names and `env: "prod"` unless the team has
 reviewed a change. Use real production database names, not the lab database names.
