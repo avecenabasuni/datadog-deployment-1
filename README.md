@@ -26,6 +26,17 @@ sudo bash scripts/eminerba-production rollback --maintenance
 It requires the recovery baseline created by apply. Host SSI, the Agent, and DBM
 SQL objects have separate rollback procedures; they are not automatically undone.
 
+To retire monitoring, use [offboarding](docs/OFFBOARDING.md):
+
+```bash
+sudo bash scripts/eminerba-production offboard --dry-run
+sudo bash scripts/eminerba-production offboard --maintenance
+```
+
+This restores applications and removes owned Agent/SSI/DBM resources. Removing SSI
+restarts Docker. Legacy/shared components without proven ownership are retained
+and reported for review; application data and recovery files remain.
+
 ## Prerequisites
 
 - Ubuntu host, local rootful Docker, Bash, Python ≥3.8, and administrator access.
@@ -129,6 +140,7 @@ remain unchanged. Use `scripts/eminerba-lab` as the rehearsal entry point.
 - [Eminerba production coordinator and one-time setup](docs/EMINERBA-PRODUCTION.md)
 - [Validation and sign-off checklist](docs/VALIDATION.md)
 - [Component-level rollback](docs/ROLLBACK.md)
+- [Offboarding and owned component cleanup](docs/OFFBOARDING.md)
 - [Local test results and limitations](docs/LOCAL-TESTS.md)
 
 ## Testing

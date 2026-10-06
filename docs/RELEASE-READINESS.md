@@ -14,6 +14,10 @@ for repeatability. Use the [production runbook](PRODUCTION-RUNBOOK.md) for deplo
   preservation, schema preflight and pinned running images.
 - Explicit application rollback using immutable original image IDs and checked
   mounts, including stopped-container recovery. No volume deletion or data restore.
+- Explicit [offboarding](OFFBOARDING.md) with managed Agent removal, recorded SQL
+  ownership and vendor-driven SSI removal. Added 6 October 2026; full uninstall
+  and Docker restart still require a dedicated VM rehearsal. Earlier reported
+  rollback success is not evidence that offboarding has been exercised.
 - Private recovery metadata and a last-stage status file. Failure/interruption
   status is written before releasing the host lock. Console errors include bounded,
   credential-redacted diagnostics; structured command output is not dumped.
@@ -65,7 +69,8 @@ not prove rollback. SQL credentials must still match the preserved database.
 4. Maintenance window, resource capacity and an assigned recovery operator. All
    three services can experience downtime; this is not a rolling deployment.
 5. Reviewed installer entry scripts and downstream behavior. Hashes do not pin all
-   downloads. Host SSI/Agent rollback and DBA changes remain separate procedures.
+   downloads. Offboarding requires its own rehearsal; legacy/shared SSI resources,
+   pre-existing DBM accounts and DBA changes still require manual review.
 6. No concurrent external Compose jobs or installers. All Python deployment CLI
    entry points now share one host lock, including standalone stages. Direct
    Docker/Compose commands and the Compose helper remain operator-controlled.

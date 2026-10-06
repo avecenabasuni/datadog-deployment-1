@@ -340,6 +340,10 @@ class DeploymentTests(unittest.TestCase):
 
     def mysql_mock(self, existing=False, conflict=False):
         def execute(sql, admin=True):
+            if "CONCAT_WS('|',plugin,authentication_string,max_user_connections)" in sql:
+                return "caching_sha2_password|test-authentication-hash|5"
+            if sql.startswith("SHOW GRANTS FOR "):
+                return "GRANT PROCESS, REPLICATION CLIENT ON *.* TO 'datadog'@'%'"
             if sql == "SELECT VERSION();":
                 return "8.0.40"
             if sql == "SELECT @@datadir;":
@@ -373,10 +377,51 @@ class DeploymentTests(unittest.TestCase):
         commands = [call.args[0] for call in self.app.mysql.call_args_list]
         self.assertTrue(any("CREATE USER" in s for s in commands))
         self.assertEqual(sum(s.startswith("DELIMITER") for s in commands), 3)
+        ownership = self.app.offboarding_manifest()["dbm"]
+        self.assertTrue(ownership["user_created"])
+        self.assertEqual(len(ownership["procedures"]), 3)
+        self.assertEqual(ownership["status"], "installed")
         self.app.mysql = self.mysql_mock(existing=True)
         self.app.dbm_sql(self.report)
         commands = [call.args[0] for call in self.app.mysql.call_args_list]
         self.assertFalse(any("CREATE USER" in s or s.startswith("DELIMITER") or "ALTER USER" in s for s in commands))
+        self.assertEqual(self.app.offboarding_manifest()["dbm"], ownership)
+
+    def test_dbm_rerun_does_not_adopt_changed_owned_account_grants(self):
+        self.app.mysql = self.mysql_mock()
+        self.app.dbm_sql(self.report)
+        original = self.app.offboarding_manifest()["dbm"]
+        execute = self.mysql_mock(existing=True)
+        def mysql(sql, admin=True):
+            if sql.startswith("SHOW GRANTS FOR "):
+                return "GRANT ALL PRIVILEGES ON *.* TO 'datadog'@'%'"
+            return execute(sql, admin=admin)
+        with patch.object(self.app, "mysql", side_effect=mysql) as calls:
+            with self.assertRaises(d.Failure):
+                self.app.dbm_sql(self.report)
+            self.assertTrue(all(call.args[0].startswith(("SELECT", "SHOW")) for call in calls.call_args_list))
+        self.assertEqual(self.app.offboarding_manifest()["dbm"], original)
+
+    def test_dbm_records_ownership_before_creating_account_and_preserves_existing_objects(self):
+        for existing in (False, True):
+            with self.subTest(existing=existing):
+                path = self.app.out / "offboarding-ownership.json"
+                if path.exists():
+                    path.unlink()
+                execute = self.mysql_mock(existing=existing)
+                def mysql(sql, admin=True):
+                    if sql.startswith("CREATE USER") or sql.startswith("GRANT REPLICATION"):
+                        saved = self.app.offboarding_manifest()["dbm"]
+                        self.assertEqual(saved["status"], "provisioning")
+                        self.assertEqual(saved["user_created"], not existing)
+                    return execute(sql, admin=admin)
+                with patch.object(self.app, "mysql", side_effect=mysql):
+                    self.app.dbm_sql(self.report)
+                saved = self.app.offboarding_manifest()["dbm"]
+                self.assertEqual(saved["user_created"], not existing)
+                self.assertEqual(len(saved["procedures"]), 0 if existing else 3)
+                for secret in self.secrets.values():
+                    self.assertNotIn(secret, path.read_text(encoding="utf-8"))
 
     def test_existing_procedure_conflict_no_mutation(self):
         self.app.mysql = self.mysql_mock(conflict=True)

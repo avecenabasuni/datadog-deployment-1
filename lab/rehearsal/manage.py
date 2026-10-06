@@ -209,18 +209,25 @@ def prepare(stack=STACK, config_path=CONFIG, secret_path=SECRETS, runner=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", nargs="?", choices=("prepare", "apply", "repair", "rollback"), default="apply")
+    parser.add_argument("action", nargs="?", choices=("prepare", "apply", "repair", "rollback", "offboard"), default="apply")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--maintenance", action="store_true")
+    parser.add_argument("--keep-ssi", action="store_true")
+    parser.add_argument("--keep-dbm", action="store_true")
     args = parser.parse_args(argv)
-    if args.action in ("apply", "rollback"):
+    if args.action in ("apply", "rollback", "offboard"):
         command = [args.action, "--lab"]
         if args.dry_run:
             command.append("--dry-run")
         if args.maintenance:
             command.append("--maintenance")
+        if args.keep_ssi:
+            command.append("--keep-ssi")
+        if args.keep_dbm:
+            command.append("--keep-dbm")
         return p.main(command)
     try:
+        d.need(not (args.keep_ssi or args.keep_dbm), "--keep-ssi and --keep-dbm apply only to offboard.")
         d.need(sys.platform.startswith("linux") and os.geteuid() == 0, "Run on a dedicated Ubuntu VM with sudo.")
         if args.action == "repair":
             d.need(args.dry_run or args.maintenance, "Lab SQL repair requires --maintenance.")

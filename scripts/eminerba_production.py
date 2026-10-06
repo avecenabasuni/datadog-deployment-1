@@ -434,13 +434,15 @@ def prepare(config_path, secret_path, compose_file, lab=False):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("prepare", "apply", "rollback"), nargs="?", default="apply")
+    parser.add_argument("action", choices=("prepare", "apply", "rollback", "offboard"), nargs="?", default="apply")
     parser.add_argument("--compose-file")
     parser.add_argument("--config", type=Path)
     parser.add_argument("--secrets", type=Path)
     parser.add_argument("--lab", action="store_true", help="Generated production-layout rehearsal only, env=lab")
     parser.add_argument("--maintenance", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--keep-ssi", action="store_true", help="Offboard applications but retain shared host SSI")
+    parser.add_argument("--keep-dbm", action="store_true", help="Retain monitoring SQL objects during offboarding")
     args = parser.parse_args(argv)
     profile = "eminerba-rehearsal" if args.lab else "eminerba"
     args.config = args.config or d.ROOT / ("config/" + profile + ".json")
@@ -450,7 +452,9 @@ def main(argv=None):
     coordinator = None
     try:
         d.need(sys.platform.startswith("linux") and os.geteuid() == 0, "Run on the target Ubuntu host using sudo.")
-        if args.action in ("apply", "rollback"):
+        d.need(args.action == "offboard" or not (args.keep_ssi or args.keep_dbm),
+               "--keep-ssi and --keep-dbm apply only to offboard.")
+        if args.action in ("apply", "rollback", "offboard"):
             d.need(args.dry_run or args.maintenance, "Application/DB recreation requires --maintenance.")
         # Serialize runs across configurations; no competing installer processes.
         with d.deployment_lock():
@@ -462,7 +466,10 @@ def main(argv=None):
             credentials = d.read_json(args.secrets, secret=True)
             coordinator = Production(d.Deployment(c, credentials), args.compose_file, lab=args.lab)
             with coordinator.track_failure():
-                if args.action == "rollback":
+                if args.action == "offboard":
+                    from eminerba_offboarding import offboard
+                    return offboard(coordinator, dry=args.dry_run, keep_ssi=args.keep_ssi, keep_dbm=args.keep_dbm)
+                elif args.action == "rollback":
                     from eminerba_recovery import rollback
                     rollback(coordinator, dry=args.dry_run)
                 else:

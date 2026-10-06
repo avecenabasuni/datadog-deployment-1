@@ -427,6 +427,21 @@ to make the check pass. See [full recovery instructions](ROLLBACK.md).
 After fixing the cause, deployment can be tried again: run step 7 first, then
 step 8 during maintenance. Repeat the tests in step 9.
 
+## Offboarding
+
+To retire monitoring after the POC, follow [offboarding](OFFBOARDING.md):
+
+```bash
+sudo bash scripts/eminerba-production offboard --dry-run
+sudo bash scripts/eminerba-production offboard --maintenance
+```
+
+This restores applications and removes owned Agent/SSI/DBM components. Removing
+SSI restarts Docker. Keep recovery files and original images. Retained legacy or
+shared resources are reported with exit code `2`; use `--keep-ssi` or `--keep-dbm`
+when intentionally retaining them. Test business requests and revoke unused
+Datadog credentials separately.
+
 ## Common problems
 
 | Message or problem | What to do |

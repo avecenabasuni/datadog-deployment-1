@@ -1,5 +1,10 @@
 # Application recovery and component rollback
 
+For retirement of monitoring, use [offboarding](OFFBOARDING.md). It runs application
+rollback and cleans recorded owned Agent/SSI/DBM components. The `rollback` command
+below retains those components; manual procedures remain available for legacy,
+shared or partially installed resources.
+
 ## Eminerba application rollback command
 
 Deployment stops on failure. **Rollback is explicit, not automatic.** A failed

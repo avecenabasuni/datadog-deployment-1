@@ -147,6 +147,11 @@ silently treating an application upgrade as an instrumentation rerun.
 
 ## Subsequent deployments and failures
 
+For retirement, use `scripts/eminerba-production offboard --dry-run`, then
+`offboard --maintenance`. It restores applications and removes owned Agent/SSI/DBM
+components; SSI removal restarts Docker. See [offboarding](OFFBOARDING.md) for
+ownership records, shared/legacy resources, keep options and retained files.
+
 The generated `production.override.json` is required for subsequent application
 operations. Running base Compose alone can remove instrumentation. The coordinator
 prints the override path; default:

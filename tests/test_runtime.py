@@ -22,6 +22,7 @@ class RuntimeTests(unittest.TestCase):
         for invoke in (lambda: d.main(["render"]),
                        lambda: p.main(["apply", "--maintenance"]),
                        lambda: p.main(["rollback", "--maintenance"]),
+                       lambda: p.main(["offboard", "--maintenance"]),
                        lambda: lab.main(["prepare"]),
                        lambda: lab.main(["repair", "--maintenance"])):
             with patch.object(d, "deployment_lock", side_effect=d.Failure("another run")) as lock, \

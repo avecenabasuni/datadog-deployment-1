@@ -1,5 +1,18 @@
 # Local test results
 
+## Offboarding regression - 6 October 2026
+
+- Windows / Python: 153 tests, 146 passed, 7 POSIX-specific skips.
+- Added coverage for read-only previews, maintenance gating, ownership capture,
+  changed SQL identities/grants, shared SSI refusal, Agent identity checks,
+  component cleanup order and manual-cleanup exit/report behavior.
+- Application schemas, tables and volumes are not cleanup targets. Existing
+  accounts and unproven legacy components are preserved for manual review.
+- Docker daemon was unavailable locally. SQL execution, vendor uninstall and
+  Docker restart remain mocked; no customer host or Datadog account was accessed.
+  WSL startup did not respond, so no new Linux test result is claimed.
+  Run the dedicated [offboarding rehearsal](OFFBOARDING.md) before production use.
+
 ## Production runbook verification — 27 September 2026
 
 - All 23 Bash examples in `PRODUCTION-RUNBOOK.md` passed `bash -n` without

@@ -186,6 +186,18 @@ dinonaktifkan. Agent, SSI host, dan objek DBM tetap ada. Uji kembali halaman lab
 dan request SQL. Lihat [cakupan rollback](../../docs/ROLLBACK.md). Deployment lama
 tanpa `recovery.json` menggunakan prosedur manual; metadata ini bukan backup DB.
 
+Untuk menguji offboarding lengkap pada VM dedicated:
+
+```bash
+sudo bash scripts/eminerba-lab offboard --dry-run
+sudo bash scripts/eminerba-lab offboard --maintenance
+```
+
+Offboarding mempertahankan data fixture, menghapus Agent dan komponen SSI/DBM
+yang ownership-nya tercatat. Uninstall SSI me-restart Docker. Instalasi lama tanpa
+catatan ownership memerlukan cleanup manual, dilaporkan dengan exit code `2`.
+Lihat [offboarding](../../docs/OFFBOARDING.md) sebelum menjalankan rehearsal.
+
 Fixture ini meniru topologi dan mount production. Aplikasi dummy menggunakan PDO;
 tidak membuktikan perilaku CodeIgniter, MySQLi, autentikasi, proxy production, atau
 CORS lintas origin. Data hanya dua schema contoh, bukan salinan data production.
@@ -202,9 +214,10 @@ sudo bash scripts/compose \
 sudo docker stop eminerba-rehearsal-agent
 ```
 
-SSI masih terpasang pada host setelah stop. Untuk kembali bersih, gunakan snapshot
-awal atau [rollback SSI](../../docs/ROLLBACK.md). Hindari prune dan `down -v` jika
+SSI masih terpasang pada host setelah stop. Untuk kembali bersih, gunakan offboarding
+di atas, snapshot awal atau [rollback SSI](../../docs/ROLLBACK.md). Hindari prune dan `down -v` jika
 data ingin dipertahankan. Saat membuat ulang/menjalankan stack setelah instrumentasi,
-sertakan `/opt/eminerba-rehearsal/generated/production.override.json`; base Compose
+sertakan `/opt/eminerba-rehearsal/generated/production.override.json`, atau
+`rollback.override.json` setelah rollback/offboarding; base Compose
 saja dapat menghilangkan konfigurasi instrumentasi. `prepare` bukan command resume
 untuk container yang sudah distop.

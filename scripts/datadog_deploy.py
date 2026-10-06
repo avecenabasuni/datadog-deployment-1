@@ -408,6 +408,20 @@ class Deployment:
              and not any(ord(ch) < 32 or ord(ch) == 127 for ch in value), "Invalid or missing secret: " + key)
         return value
 
+    def offboarding_manifest(self):
+        context = {key: self.c[key] for key in ("env", "agent_name", "mysql_container",
+                                               "db_user", "db_user_host", "mysql_schemas")}
+        path = self.out / "offboarding-ownership.json"
+        saved = read_json(path, secret=True) if path.exists() else {"version": 1, "context": context}
+        need(saved.get("version") == 1 and saved.get("context") == context,
+             "Offboarding ownership differs from configuration; review the saved inventory.")
+        return saved
+
+    def record_offboarding(self, section, value):
+        saved = self.offboarding_manifest()
+        saved[section] = value
+        secure_write(self.out / "offboarding-ownership.json", jdump(saved))
+
     def service(self, report, role):
         label = report["selected"][role]["service"]
         explicit = self.c.get(role + "_compose_service")
@@ -656,6 +670,12 @@ class Deployment:
         for source in (Path("/etc/docker/daemon.json"), Path("/etc/ld.so.preload")):
             if source.exists():
                 secure_write(backup / source.name, source.read_text())
+        ownership = self.offboarding_manifest().get("ssi")
+        need(not ownership or ownership.get("status") == "removed",
+             "SSI ownership from an earlier attempt remains; inspect it before reinstalling.")
+        ownership = {"status": "installing", "original_runtime": inventory["default_runtime"],
+                     "backup": str(backup), "packages": ["datadog-apm-inject", "datadog-apm-library-php"]}
+        self.record_offboarding("ssi", ownership)
         env = os.environ.copy()
         for key in list(env):
             if key.startswith("DD_"):
@@ -665,6 +685,8 @@ class Deployment:
         self.run(["bash", str(path)], env=env, timeout=1800)
         need(self.docker("info", "--format", "{{.DefaultRuntime}}") == "dd-shim",
              "The installer exited but Docker's default runtime is not dd-shim.")
+        ownership["status"] = "installed"
+        self.record_offboarding("ssi", ownership)
         if getattr(self, "coordinated", False):
             log("Host SSI installed. Application recreation will follow.", "OK")
         else:
@@ -740,6 +762,7 @@ class Deployment:
                                + literal(c["db_user"]) + " AND host=" + literal(c["db_user_host"]) + ";")
             need(limit == "5", "The existing account has a different connection limit; ask the DBA to review it.")
         pending = []
+        new_routines = []
         for (schema, name), ddl in routines.items():
             definition = self.mysql(
                 "SELECT CONCAT(security_type,'|',COALESCE(routine_definition,'')) "
@@ -758,10 +781,35 @@ class Deployment:
                      "Existing procedure signature differs: " + schema + "." + name)
             else:
                 pending.append(ddl)
+                new_routines.append({"schema": schema, "name": name,
+                                     "body": normalize_sql(ddl[ddl.index("BEGIN"):]),
+                                     "parameters": "IN:text" if name == "explain_statement" else ""})
         if self.dry:
             log("DRY-RUN: DBM checks OK; user existing=" + str(exists)
                   + "; new procedures=" + str(len(pending)) + "; no SQL changes made.")
             return
+        ownership = self.offboarding_manifest().get("dbm")
+        if not ownership or ownership.get("status") == "removed":
+            if new_routines:
+                definer = self.mysql("SELECT CURRENT_USER();")
+                need(definer and "@" in definer, "Cannot record the DBM procedure owner before provisioning.")
+                for routine in new_routines:
+                    routine["definer"] = definer
+            ownership = {"status": "provisioning", "user_created": not exists,
+                         "schema_created": self.mysql("SELECT COUNT(*) FROM information_schema.schemata "
+                                                      "WHERE schema_name='datadog';") == "0",
+                         "procedures": new_routines}
+            self.record_offboarding("dbm", ownership)
+        else:
+            need(ownership.get("status") in ("provisioning", "installed"), "Invalid DBM ownership status.")
+            if ownership["status"] == "installed" and ownership["user_created"]:
+                account_state = self.mysql(
+                    "SELECT CONCAT_WS('|',plugin,authentication_string,max_user_connections) FROM mysql.user WHERE user="
+                    + literal(c["db_user"]) + " AND host=" + literal(c["db_user_host"]) + ";")
+                account_grants = self.mysql("SHOW GRANTS FOR " + account + ";")
+                need(hashlib.sha256(account_state.encode()).hexdigest() == ownership.get("account_fingerprint") and
+                     hashlib.sha256(account_grants.encode()).hexdigest() == ownership.get("grants_fingerprint"),
+                     "Owned DBM account changed since provisioning; review it before reapplying grants.")
         self.mysql(("" if exists else create) + grants)
         for ddl in pending:
             self.mysql("DELIMITER $$\n" + ddl + "$$\nDELIMITER ;\n")
@@ -769,6 +817,16 @@ class Deployment:
             self.mysql("GRANT EXECUTE ON PROCEDURE " + identifier(schema) + "." + name
                        + " TO " + account + ";")
         self.mysql("CALL datadog.enable_events_statements_consumers();")
+        ownership["status"] = "installed"
+        if ownership["user_created"]:
+            account_state = self.mysql(
+                "SELECT CONCAT_WS('|',plugin,authentication_string,max_user_connections) FROM mysql.user WHERE user="
+                + literal(c["db_user"]) + " AND host=" + literal(c["db_user_host"]) + ";")
+            account_grants = self.mysql("SHOW GRANTS FOR " + account + ";")
+            need(account_state and account_grants.startswith("GRANT "), "Cannot record the created DBM account after provisioning.")
+            ownership["account_fingerprint"] = hashlib.sha256(account_state.encode()).hexdigest()
+            ownership["grants_fingerprint"] = hashlib.sha256(account_grants.encode()).hexdigest()
+        self.record_offboarding("dbm", ownership)
         log("DBM SQL provisioning completed. Verify MySQL after applying the startup configuration.")
 
     def rum_connection(self):
