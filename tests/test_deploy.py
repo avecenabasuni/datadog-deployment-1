@@ -308,14 +308,26 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("Skipping rum_url", messages)
         self.assertNotIn("passed", messages)
 
-    def test_mysql_credentials_only_in_stdin(self):
-        self.app.mysql("SELECT 1;")
-        args, kwargs = self.runner.calls[-1]
-        self.assertNotIn(self.secrets["admin_password"], " ".join(args))
-        self.assertEqual(kwargs["data"].splitlines()[0], self.secrets["admin_password"])
-        self.assertIn(d.SQL_MODE, kwargs["data"])
-        self.assertIn("--binary-mode", " ".join(args))
-        self.assertNotIn("env", kwargs)
+    def test_mysql_local_authentication_preserves_credentials_and_timeouts(self):
+        for admin in (True, False):
+            with self.subTest(admin=admin):
+                self.app.mysql("SELECT 1;", admin=admin, timeout=3)
+                args, kwargs = self.runner.calls[-1]
+                password = self.secrets["admin_password" if admin else "db_password"]
+                user = self.c["admin_user" if admin else "db_user"]
+                command = " ".join(args)
+                self.assertEqual(args[:4], ["docker", "exec", "-i", self.c["mysql_container"]])
+                self.assertEqual(args[-2:], [str(self.c["mysql_port"]), user])
+                for secret in self.secrets.values():
+                    self.assertNotIn(secret, command)
+                self.assertEqual(kwargs["data"], password + "\n" + d.SQL_MODE + "SELECT 1;")
+                self.assertEqual(kwargs["timeout"], 3)
+                self.assertNotIn("env", kwargs)
+                self.assertIn("--loose-get-server-public-key", command)
+                self.assertIn("--protocol=tcp", command)
+                self.assertIn("--host=127.0.0.1", command)
+                self.assertIn("--binary-mode", command)
+                self.assertNotIn("--ssl-mode=DISABLED", command)
 
     def test_dba_export_does_not_rotate_or_drop(self):
         self.app.dbm_sql(self.report, export=True)

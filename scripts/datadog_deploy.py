@@ -674,8 +674,10 @@ class Deployment:
         """Password via stdin, never Docker argv or container environment config."""
         password = self.secret("admin_password" if admin else "db_password")
         user = self.c["admin_user" if admin else "db_user"]
+        # Loopback RSA exchange supports caching_sha2_password; loose keeps older 5.7 clients compatible.
         script = ('IFS= read -r MYSQL_PWD; export MYSQL_PWD; '
-                  'exec mysql --protocol=tcp --connect-timeout=5 --host=127.0.0.1 --port="$1" --user="$2" '
+                  'exec mysql --loose-get-server-public-key --protocol=tcp --connect-timeout=5 '
+                  '--host=127.0.0.1 --port="$1" --user="$2" '
                   '--batch --raw --skip-column-names --binary-mode --default-character-set=utf8mb4 '
                   '--init-command="SET SESSION sql_mode=\'NO_BACKSLASH_ESCAPES\'"')
         return self.docker("exec", "-i", self.c["mysql_container"], "sh", "-c", script,

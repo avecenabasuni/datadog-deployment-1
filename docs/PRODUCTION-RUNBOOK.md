@@ -434,6 +434,7 @@ step 8 during maintenance. Repeat the tests in step 9.
 | `no such object: eminerba_web` | The container is missing. Ask the application team to restore it; do not use lab setup commands |
 | `Application schema not found` | Check `mysql_schemas` with the database team. A schema means a database name here |
 | MySQL `Access denied` | Check the saved username/password and account permissions with the database team |
+| MySQL `ERROR 2061`, `caching_sha2_password`, `Authentication requires secure connection` | Update the deployment scripts and retry dry-run. Local TCP probes request the server's RSA public key when needed. If this persists, ask the database team to check server RSA keys and TLS settings |
 | Configuration already exists | Review the existing files in step 5; do not generate new passwords |
 | Another deployment is active | Wait for that run or ask its operator. Do not delete the lock file |
 | Checksum mismatch | Review the installer file with the technical team before changing the saved checksum |
